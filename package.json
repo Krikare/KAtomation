@@ -1,0 +1,18 @@
+{
+  "name": "katomation",
+  "version": "0.1.0",
+  "private": true,
+  "description": "K{Atomation} — Universal Job Application Autofill Chrome Extension (Milestone 1)",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "build:js": "esbuild src/popup/popup.ts src/options/options.ts src/background/background.ts src/content/content.ts --bundle --outdir=dist --outbase=src --format=iife --target=chrome120",
+    "build:assets": "mkdir -p dist/popup dist/options && cp manifest.json dist/ && cp -r public/. dist/ && cp src/popup/popup.html src/popup/popup.css dist/popup/ && cp src/options/options.html src/options/options.css dist/options/",
+    "build": "npm run clean && npm run typecheck && npm run build:js && npm run build:assets"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.287",
+    "esbuild": "^0.24.2",
+    "typescript": "^5.7.2"
+  }
+}

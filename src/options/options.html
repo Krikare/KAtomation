@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>K{Atomation} — Profile Settings</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <div class="page-wrapper">
+      <header class="page-header">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">K{}</div>
+          <div>
+            <h1 class="brand-title">K{Atomation}</h1>
+            <p class="brand-subtitle">Profile Settings</p>
+          </div>
+        </div>
+        <span class="storage-pill">Local Storage Only</span>
+      </header>
+
+      <main class="settings-card">
+        <p class="intro-text">
+          Store your personal details locally in Chrome so future autofill adapters can populate
+          Workday and Greenhouse forms. You will always upload your resume and submit manually.
+        </p>
+
+        <form id="profile-form" class="profile-form" novalidate>
+          <fieldset class="form-section">
+            <legend class="section-title">Personal Information</legend>
+            <div class="field-grid">
+              <div class="field">
+                <label for="firstName">First Name</label>
+                <input id="firstName" name="firstName" type="text" placeholder="Jane" autocomplete="given-name" />
+              </div>
+              <div class="field">
+                <label for="lastName">Last Name</label>
+                <input id="lastName" name="lastName" type="text" placeholder="Doe" autocomplete="family-name" />
+              </div>
+              <div class="field">
+                <label for="email">Email Address</label>
+                <input id="email" name="email" type="email" placeholder="jane.doe@example.com" autocomplete="email" />
+              </div>
+              <div class="field">
+                <label for="phone">Phone Number</label>
+                <input id="phone" name="phone" type="tel" placeholder="+1 (555) 123-4567" autocomplete="tel" />
+              </div>
+              <div class="field field--full">
+                <label for="location">Location (City, State / Country)</label>
+                <input id="location" name="location" type="text" placeholder="San Francisco, CA, USA" />
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset class="form-section">
+            <legend class="section-title">Professional Links</legend>
+            <div class="field-grid">
+              <div class="field field--full">
+                <label for="linkedinUrl">LinkedIn URL</label>
+                <input id="linkedinUrl" name="linkedinUrl" type="url" placeholder="https://www.linkedin.com/in/janedoe" />
+              </div>
+              <div class="field">
+                <label for="githubUrl">GitHub URL</label>
+                <input id="githubUrl" name="githubUrl" type="url" placeholder="https://github.com/janedoe" />
+              </div>
+              <div class="field">
+                <label for="portfolioUrl">Portfolio / Website</label>
+                <input id="portfolioUrl" name="portfolioUrl" type="url" placeholder="https://janedoe.dev" />
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset class="form-section">
+            <legend class="section-title">Work Authorization</legend>
+            <div class="field-grid">
+              <div class="field">
+                <label for="workAuthorized">Authorized to work in target region</label>
+                <select id="workAuthorized" name="workAuthorized">
+                  <option value="">Select an option</option>
+                  <option value="yes">Yes</option>
+                  <option value="no">No</option>
+                  <option value="prefer_not_to_say">Prefer not to say</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="sponsorshipRequired">Requires visa sponsorship</label>
+                <select id="sponsorshipRequired" name="sponsorshipRequired">
+                  <option value="">Select an option</option>
+                  <option value="no">No</option>
+                  <option value="yes">Yes</option>
+                  <option value="prefer_not_to_say">Prefer not to say</option>
+                </select>
+              </div>
+            </div>
+          </fieldset>
+
+          <div class="form-actions">
+            <div class="action-buttons">
+              <button id="save-btn" class="btn btn-primary" type="submit">Save Profile</button>
+              <button id="clear-btn" class="btn btn-secondary" type="button">Clear Saved Data</button>
+            </div>
+            <p id="save-status" class="save-status" role="status" aria-live="polite"></p>
+          </div>
+        </form>
+      </main>
+    </div>
+
+    <script src="options.js"></script>
+  </body>
+</html>
