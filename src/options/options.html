@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>K{Atomation} — Profile Settings</title>
+    <title>K{Atomation} — Profile &amp; Answer Engine</title>
     <link rel="stylesheet" href="options.css" />
   </head>
   <body>
@@ -13,7 +13,7 @@
           <div class="brand-mark" aria-hidden="true">K{}</div>
           <div>
             <h1 class="brand-title">K{Atomation}</h1>
-            <p class="brand-subtitle">Profile Settings</p>
+            <p class="brand-subtitle">Universal Profile &amp; Application Answer Engine</p>
           </div>
         </div>
         <span class="storage-pill">Local Storage Only</span>
@@ -21,22 +21,102 @@
 
       <main class="settings-card">
         <p class="intro-text">
-          Store your personal details locally in Chrome so future autofill adapters can populate
-          Workday and Greenhouse forms. You will always upload your resume and submit manually.
+          Manage your universal job profile and reusable application answers locally in Chrome
+          (<code>chrome.storage.local</code>). Resume upload and final application submission
+          always remain manual.
         </p>
 
+        <nav class="tabs-bar" role="tablist" aria-label="Profile and answer sections">
+          <button
+            id="tab-personal"
+            class="tab-btn tab-btn--active"
+            type="button"
+            role="tab"
+            aria-selected="true"
+            aria-controls="panel-personal"
+            data-tab="personal"
+          >
+            Personal Info
+          </button>
+          <button
+            id="tab-education"
+            class="tab-btn"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="panel-education"
+            data-tab="education"
+          >
+            Education
+          </button>
+          <button
+            id="tab-employment"
+            class="tab-btn"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="panel-employment"
+            data-tab="employment"
+          >
+            Employment
+          </button>
+          <button
+            id="tab-links"
+            class="tab-btn"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="panel-links"
+            data-tab="links"
+          >
+            Professional Links
+          </button>
+          <button
+            id="tab-answers"
+            class="tab-btn"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="panel-answers"
+            data-tab="answers"
+          >
+            Application Answers
+          </button>
+        </nav>
+
         <form id="profile-form" class="profile-form" novalidate>
-          <fieldset class="form-section">
-            <legend class="section-title">Personal Information</legend>
-            <div class="field-grid">
+          <!-- Tab 1: Personal Information -->
+          <section
+            id="panel-personal"
+            class="tab-panel"
+            role="tabpanel"
+            aria-labelledby="tab-personal"
+          >
+            <div class="panel-header">
+              <div>
+                <h2 class="section-title">Personal Information</h2>
+                <p class="section-subtitle">
+                  Core contact and address details used across application forms.
+                </p>
+              </div>
+            </div>
+
+            <div class="field-grid field-grid--three">
               <div class="field">
                 <label for="firstName">First Name</label>
                 <input id="firstName" name="firstName" type="text" placeholder="Jane" autocomplete="given-name" />
               </div>
               <div class="field">
+                <label for="middleName">Middle Name</label>
+                <input id="middleName" name="middleName" type="text" placeholder="Marie" autocomplete="additional-name" />
+              </div>
+              <div class="field">
                 <label for="lastName">Last Name</label>
                 <input id="lastName" name="lastName" type="text" placeholder="Doe" autocomplete="family-name" />
               </div>
+            </div>
+
+            <div class="field-grid">
               <div class="field">
                 <label for="email">Email Address</label>
                 <input id="email" name="email" type="email" placeholder="jane.doe@example.com" autocomplete="email" />
@@ -46,14 +126,83 @@
                 <input id="phone" name="phone" type="tel" placeholder="+1 (555) 123-4567" autocomplete="tel" />
               </div>
               <div class="field field--full">
-                <label for="location">Location (City, State / Country)</label>
-                <input id="location" name="location" type="text" placeholder="San Francisco, CA, USA" />
+                <label for="address">Street Address</label>
+                <input id="address" name="address" type="text" placeholder="123 Market Street, Apt 4B" autocomplete="street-address" />
+              </div>
+              <div class="field">
+                <label for="city">City</label>
+                <input id="city" name="city" type="text" placeholder="San Francisco" autocomplete="address-level2" />
+              </div>
+              <div class="field">
+                <label for="state">State / Province</label>
+                <input id="state" name="state" type="text" placeholder="California" autocomplete="address-level1" />
+              </div>
+              <div class="field">
+                <label for="country">Country</label>
+                <input id="country" name="country" type="text" placeholder="United States" autocomplete="country-name" />
+              </div>
+              <div class="field">
+                <label for="postalCode">Postal Code</label>
+                <input id="postalCode" name="postalCode" type="text" placeholder="94105" autocomplete="postal-code" />
               </div>
             </div>
-          </fieldset>
+          </section>
 
-          <fieldset class="form-section">
-            <legend class="section-title">Professional Links</legend>
+          <!-- Tab 2: Education -->
+          <section
+            id="panel-education"
+            class="tab-panel"
+            role="tabpanel"
+            aria-labelledby="tab-education"
+            hidden
+          >
+            <div class="panel-header">
+              <div>
+                <h2 class="section-title">Education</h2>
+                <p class="section-subtitle">Add one or more academic degrees or programs.</p>
+              </div>
+              <button id="add-education-btn" class="btn btn-outline" type="button">
+                + Add Education
+              </button>
+            </div>
+            <div id="education-list" class="repeatable-list"></div>
+          </section>
+
+          <!-- Tab 3: Employment -->
+          <section
+            id="panel-employment"
+            class="tab-panel"
+            role="tabpanel"
+            aria-labelledby="tab-employment"
+            hidden
+          >
+            <div class="panel-header">
+              <div>
+                <h2 class="section-title">Employment History</h2>
+                <p class="section-subtitle">Add past or current roles and responsibilities.</p>
+              </div>
+              <button id="add-employment-btn" class="btn btn-outline" type="button">
+                + Add Employment
+              </button>
+            </div>
+            <div id="employment-list" class="repeatable-list"></div>
+          </section>
+
+          <!-- Tab 4: Professional Links -->
+          <section
+            id="panel-links"
+            class="tab-panel"
+            role="tabpanel"
+            aria-labelledby="tab-links"
+            hidden
+          >
+            <div class="panel-header">
+              <div>
+                <h2 class="section-title">Professional Links</h2>
+                <p class="section-subtitle">Public profile URLs for applications.</p>
+              </div>
+            </div>
+
             <div class="field-grid">
               <div class="field field--full">
                 <label for="linkedinUrl">LinkedIn URL</label>
@@ -68,40 +217,135 @@
                 <input id="portfolioUrl" name="portfolioUrl" type="url" placeholder="https://janedoe.dev" />
               </div>
             </div>
-          </fieldset>
+          </section>
 
-          <fieldset class="form-section">
-            <legend class="section-title">Work Authorization</legend>
-            <div class="field-grid">
-              <div class="field">
-                <label for="workAuthorized">Authorized to work in target region</label>
-                <select id="workAuthorized" name="workAuthorized">
-                  <option value="">Select an option</option>
-                  <option value="yes">Yes</option>
-                  <option value="no">No</option>
-                  <option value="prefer_not_to_say">Prefer not to say</option>
-                </select>
-              </div>
-              <div class="field">
-                <label for="sponsorshipRequired">Requires visa sponsorship</label>
-                <select id="sponsorshipRequired" name="sponsorshipRequired">
-                  <option value="">Select an option</option>
-                  <option value="no">No</option>
-                  <option value="yes">Yes</option>
-                  <option value="prefer_not_to_say">Prefer not to say</option>
-                </select>
-              </div>
-            </div>
-          </fieldset>
-
-          <div class="form-actions">
+          <div id="profile-actions-bar" class="form-actions">
             <div class="action-buttons">
               <button id="save-btn" class="btn btn-primary" type="submit">Save Profile</button>
-              <button id="clear-btn" class="btn btn-secondary" type="button">Clear Saved Data</button>
+              <button id="clear-btn" class="btn btn-secondary" type="button">Clear Profile Data</button>
             </div>
             <p id="save-status" class="save-status" role="status" aria-live="polite"></p>
           </div>
         </form>
+
+        <!-- Tab 5: Application Answers (stored independently from UserProfile) -->
+        <section
+          id="panel-answers"
+          class="tab-panel answers-panel"
+          role="tabpanel"
+          aria-labelledby="tab-answers"
+          hidden
+        >
+          <div class="panel-header">
+            <div>
+              <h2 class="section-title">Application Answer Library</h2>
+              <p class="section-subtitle">
+                Save reusable answers to recurring screening questions. Unknown legal declarations
+                are never auto-generated.
+              </p>
+            </div>
+          </div>
+
+          <form id="answer-form" class="entry-card answer-editor" novalidate>
+            <div class="entry-card-header">
+              <h3 id="answer-form-title" class="entry-card-title">Add Application Answer</h3>
+            </div>
+
+            <div class="field-grid">
+              <div class="field field--full">
+                <label for="answer-question">Original Question</label>
+                <input
+                  id="answer-question"
+                  name="question"
+                  type="text"
+                  placeholder="e.g. Will you now or in the future require sponsorship for employment visa status?"
+                />
+              </div>
+
+              <div class="field">
+                <label for="answer-category">Category</label>
+                <select id="answer-category" name="category">
+                  <option value="work_authorization">Work authorization</option>
+                  <option value="sponsorship">Visa sponsorship</option>
+                  <option value="education">Education</option>
+                  <option value="employment">Employment</option>
+                  <option value="relocation">Relocation</option>
+                  <option value="notice_period">Notice period</option>
+                  <option value="availability">Availability</option>
+                  <option value="salary_expectations">Salary expectations</option>
+                  <option value="general" selected>General questions</option>
+                  <option value="custom">Custom questions</option>
+                </select>
+              </div>
+
+              <div class="field">
+                <label for="answer-keywords">Search Keywords (comma-separated)</label>
+                <input
+                  id="answer-keywords"
+                  name="keywords"
+                  type="text"
+                  placeholder="visa, sponsorship, h1b"
+                />
+              </div>
+
+              <div class="field field--full">
+                <label for="answer-text">Saved Answer</label>
+                <textarea
+                  id="answer-text"
+                  name="answer"
+                  rows="3"
+                  placeholder="Enter the exact response you want saved for this question..."
+                ></textarea>
+              </div>
+
+              <div class="field field--full">
+                <label class="checkbox-row" for="answer-requires-confirmation">
+                  <input id="answer-requires-confirmation" name="requiresConfirmation" type="checkbox" />
+                  <span>Requires confirmation before autofill (recommended for legal or sensitive declarations)</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="answer-form-actions">
+              <div class="action-buttons">
+                <button id="save-answer-btn" class="btn btn-primary" type="submit">Save Answer</button>
+                <button id="cancel-answer-btn" class="btn btn-secondary" type="button" hidden>
+                  Cancel Edit
+                </button>
+              </div>
+              <p id="answer-status" class="save-status" role="status" aria-live="polite"></p>
+            </div>
+          </form>
+
+          <div class="answers-toolbar">
+            <div class="field">
+              <label for="filter-category">Filter by Category</label>
+              <select id="filter-category">
+                <option value="all">All categories</option>
+                <option value="work_authorization">Work authorization</option>
+                <option value="sponsorship">Visa sponsorship</option>
+                <option value="education">Education</option>
+                <option value="employment">Employment</option>
+                <option value="relocation">Relocation</option>
+                <option value="notice_period">Notice period</option>
+                <option value="availability">Availability</option>
+                <option value="salary_expectations">Salary expectations</option>
+                <option value="general">General questions</option>
+                <option value="custom">Custom questions</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="filter-search">Search Questions &amp; Keywords</label>
+              <input id="filter-search" type="search" placeholder="Search saved answers..." />
+            </div>
+          </div>
+
+          <div class="answers-summary">
+            <span id="answers-count" class="answers-count">0 saved answers</span>
+          </div>
+
+          <div id="answers-list" class="repeatable-list"></div>
+        </section>
       </main>
     </div>
 

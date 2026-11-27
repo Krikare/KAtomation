@@ -1,6 +1,31 @@
 "use strict";
 (() => {
   // src/shared/constants.ts
+  var DEFAULT_PERSONAL_INFO = {
+    firstName: "",
+    middleName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    address: "",
+    city: "",
+    state: "",
+    country: "",
+    postalCode: ""
+  };
+  var DEFAULT_PROFESSIONAL_LINKS = {
+    linkedinUrl: "",
+    githubUrl: "",
+    portfolioUrl: ""
+  };
+  var DEFAULT_USER_PROFILE = {
+    personal: { ...DEFAULT_PERSONAL_INFO },
+    education: [],
+    employment: [],
+    links: { ...DEFAULT_PROFESSIONAL_LINKS },
+    workAuthorized: "",
+    sponsorshipRequired: ""
+  };
   var INITIAL_DETECTION_STATE = {
     detected: false,
     platform: "unknown",

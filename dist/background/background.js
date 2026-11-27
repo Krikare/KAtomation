@@ -2,17 +2,31 @@
 (() => {
   // src/shared/constants.ts
   var STORAGE_KEYS = {
-    USER_PROFILE: "katomation_user_profile"
+    USER_PROFILE: "katomation_user_profile",
+    APPLICATION_ANSWERS: "katomation_application_answers"
   };
-  var DEFAULT_USER_PROFILE = {
+  var DEFAULT_PERSONAL_INFO = {
     firstName: "",
+    middleName: "",
     lastName: "",
     email: "",
     phone: "",
-    location: "",
+    address: "",
+    city: "",
+    state: "",
+    country: "",
+    postalCode: ""
+  };
+  var DEFAULT_PROFESSIONAL_LINKS = {
     linkedinUrl: "",
     githubUrl: "",
-    portfolioUrl: "",
+    portfolioUrl: ""
+  };
+  var DEFAULT_USER_PROFILE = {
+    personal: { ...DEFAULT_PERSONAL_INFO },
+    education: [],
+    employment: [],
+    links: { ...DEFAULT_PROFESSIONAL_LINKS },
     workAuthorized: "",
     sponsorshipRequired: ""
   };
@@ -90,10 +104,18 @@
 
   // src/background/background.ts
   chrome.runtime.onInstalled.addListener(async () => {
-    const existing = await chrome.storage.local.get(STORAGE_KEYS.USER_PROFILE);
+    const existing = await chrome.storage.local.get([
+      STORAGE_KEYS.USER_PROFILE,
+      STORAGE_KEYS.APPLICATION_ANSWERS
+    ]);
     if (!existing[STORAGE_KEYS.USER_PROFILE]) {
       await chrome.storage.local.set({
         [STORAGE_KEYS.USER_PROFILE]: { ...DEFAULT_USER_PROFILE }
+      });
+    }
+    if (!existing[STORAGE_KEYS.APPLICATION_ANSWERS]) {
+      await chrome.storage.local.set({
+        [STORAGE_KEYS.APPLICATION_ANSWERS]: []
       });
     }
   });

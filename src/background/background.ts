@@ -3,10 +3,18 @@ import { DEFAULT_USER_PROFILE, INITIAL_DETECTION_STATE, STORAGE_KEYS } from '../
 import type { ExtensionMessage, ExtensionMessageResponse } from '../shared/types';
 
 chrome.runtime.onInstalled.addListener(async () => {
-  const existing = await chrome.storage.local.get(STORAGE_KEYS.USER_PROFILE);
+  const existing = await chrome.storage.local.get([
+    STORAGE_KEYS.USER_PROFILE,
+    STORAGE_KEYS.APPLICATION_ANSWERS,
+  ]);
   if (!existing[STORAGE_KEYS.USER_PROFILE]) {
     await chrome.storage.local.set({
       [STORAGE_KEYS.USER_PROFILE]: { ...DEFAULT_USER_PROFILE },
+    });
+  }
+  if (!existing[STORAGE_KEYS.APPLICATION_ANSWERS]) {
+    await chrome.storage.local.set({
+      [STORAGE_KEYS.APPLICATION_ANSWERS]: [],
     });
   }
 });
