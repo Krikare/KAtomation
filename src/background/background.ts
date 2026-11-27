@@ -1,6 +1,31 @@
-import { detectPlatformFromUrl } from '../adapters/registry';
-import { DEFAULT_USER_PROFILE, INITIAL_DETECTION_STATE, STORAGE_KEYS } from '../shared/constants';
-import type { ExtensionMessage, ExtensionMessageResponse } from '../shared/types';
+import {
+  createUnsupportedDetectionResult,
+  detectPlatformFromUrl,
+} from '../adapters/registry';
+import { DEFAULT_USER_PROFILE, STORAGE_KEYS } from '../shared/constants';
+import type {
+  ExtensionMessage,
+  ExtensionMessageResponse,
+  PlatformDetectionResult,
+} from '../shared/types';
+
+const RESTRICTED_URL_PREFIXES = [
+  'chrome://',
+  'chrome-extension://',
+  'edge://',
+  'about:',
+  'view-source:',
+  'devtools://',
+  'https://chromewebstore.google.com',
+  'https://chrome.google.com/webstore',
+] as const;
+
+const tabDetectionCache = new Map<number, PlatformDetectionResult>();
+
+function isRestrictedUrl(url: string): boolean {
+  const lower = url.toLowerCase();
+  return RESTRICTED_URL_PREFIXES.some((prefix) => lower.startsWith(prefix));
+}
 
 chrome.runtime.onInstalled.addListener(async () => {
   const existing = await chrome.storage.local.get([
@@ -19,11 +44,36 @@ chrome.runtime.onInstalled.addListener(async () => {
   }
 });
 
+chrome.tabs.onRemoved.addListener((tabId) => {
+  tabDetectionCache.delete(tabId);
+});
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (changeInfo.url) {
+    tabDetectionCache.delete(tabId);
+  }
+});
+
 async function resolveActiveTabPlatform(): Promise<ExtensionMessageResponse> {
   const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
-  if (!activeTab?.id) {
-    return { ok: true, detection: { ...INITIAL_DETECTION_STATE } };
+  if (!activeTab || activeTab.id === undefined) {
+    return {
+      ok: true,
+      detection: createUnsupportedDetectionResult('', 'No active browser tab found.'),
+    };
+  }
+
+  const tabUrl = activeTab.url ?? '';
+
+  if (tabUrl && isRestrictedUrl(tabUrl)) {
+    return {
+      ok: true,
+      detection: createUnsupportedDetectionResult(
+        tabUrl,
+        'Restricted browser page. ATS detection is not available on Chrome internal or Web Store pages.',
+      ),
+    };
   }
 
   try {
@@ -32,28 +82,47 @@ async function resolveActiveTabPlatform(): Promise<ExtensionMessageResponse> {
     } satisfies ExtensionMessage)) as ExtensionMessageResponse | undefined;
 
     if (response?.ok) {
+      tabDetectionCache.set(activeTab.id, response.detection);
       return response;
     }
   } catch {
-    // Content script is only injected on supported ATS origins.
+    // Content script is unavailable on unsupported origins or un-reloaded tabs.
   }
 
-  if (activeTab.url) {
-    return {
-      ok: true,
-      detection: detectPlatformFromUrl(activeTab.url),
-    };
+  const cached = tabDetectionCache.get(activeTab.id);
+  if (cached && (!tabUrl || cached.url === tabUrl)) {
+    return { ok: true, detection: cached };
   }
 
-  return { ok: true, detection: { ...INITIAL_DETECTION_STATE } };
+  if (tabUrl) {
+    const urlDetection = detectPlatformFromUrl(tabUrl);
+    tabDetectionCache.set(activeTab.id, urlDetection);
+    return { ok: true, detection: urlDetection };
+  }
+
+  return {
+    ok: true,
+    detection: createUnsupportedDetectionResult(
+      '',
+      'Page URL is unavailable for this tab. Navigate to a supported recruitment page.',
+    ),
+  };
 }
 
 chrome.runtime.onMessage.addListener(
   (
     message: ExtensionMessage,
-    _sender: chrome.runtime.MessageSender,
+    sender: chrome.runtime.MessageSender,
     sendResponse: (response: ExtensionMessageResponse) => void,
   ) => {
+    if (message.type === 'PLATFORM_DETECTION_REPORT') {
+      if (sender.tab?.id !== undefined) {
+        tabDetectionCache.set(sender.tab.id, message.detection);
+      }
+      sendResponse({ ok: true, detection: message.detection });
+      return false;
+    }
+
     if (message.type === 'GET_PLATFORM_STATUS') {
       void resolveActiveTabPlatform()
         .then(sendResponse)

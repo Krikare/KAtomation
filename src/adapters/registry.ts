@@ -9,32 +9,56 @@ export const ATS_ADAPTERS: readonly ATSAdapter[] = [
   new GreenhouseAdapter(),
 ];
 
+export function createUnsupportedDetectionResult(
+  url: string,
+  reason = INITIAL_DETECTION_STATE.reason,
+): PlatformDetectionResult {
+  return {
+    platformId: 'unknown',
+    platformName: 'Unknown',
+    isSupported: false,
+    isApplicationPage: false,
+    pageType: 'unsupported',
+    reason,
+    url,
+    signals: [],
+  };
+}
+
 export function detectPlatformFromUrl(url: string): PlatformDetectionResult {
+  const trimmedUrl = url.trim();
+  if (!trimmedUrl) {
+    return createUnsupportedDetectionResult('', 'No page URL available for platform detection.');
+  }
+
   for (const adapter of ATS_ADAPTERS) {
-    if (adapter.matchesUrl(url)) {
-      return {
-        detected: true,
-        platform: adapter.id,
-        label: adapter.displayName,
-        url,
-      };
+    const result = adapter.detectFromUrl(trimmedUrl);
+    if (result.isSupported) {
+      return result;
     }
   }
 
-  return { ...INITIAL_DETECTION_STATE };
+  return createUnsupportedDetectionResult(
+    trimmedUrl,
+    'This website is not a supported Workday or Greenhouse recruitment platform.',
+  );
 }
 
 export function detectPlatformInDocument(doc: Document, url: string): PlatformDetectionResult {
+  const trimmedUrl = url.trim();
+  if (!trimmedUrl) {
+    return createUnsupportedDetectionResult('', 'No page URL available for platform detection.');
+  }
+
   for (const adapter of ATS_ADAPTERS) {
-    if (adapter.detectPage(doc, url)) {
-      return {
-        detected: true,
-        platform: adapter.id,
-        label: adapter.displayName,
-        url,
-      };
+    const result = adapter.detectFromDocument(doc, trimmedUrl);
+    if (result.isSupported) {
+      return result;
     }
   }
 
-  return { ...INITIAL_DETECTION_STATE };
+  return createUnsupportedDetectionResult(
+    trimmedUrl,
+    'This website is not a supported Workday or Greenhouse recruitment platform.',
+  );
 }

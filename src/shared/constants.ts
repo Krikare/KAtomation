@@ -65,7 +65,11 @@ export const ANSWER_CATEGORY_LABELS: Readonly<Record<AnswerCategory, string>> = 
 };
 
 export const INITIAL_DETECTION_STATE: PlatformDetectionResult = {
-  detected: false,
-  platform: 'unknown',
-  label: 'Not detected',
+  platformId: 'unknown',
+  platformName: 'Unknown',
+  isSupported: false,
+  isApplicationPage: false,
+  pageType: 'unsupported',
+  reason: 'Unsupported website or no active recruitment page detected.',
+  url: '',
 };

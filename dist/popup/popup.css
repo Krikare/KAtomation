@@ -9,6 +9,8 @@
   --accent-soft: #eef2ff;
   --success: #059669;
   --success-soft: #ecfdf5;
+  --info: #4338ca;
+  --info-soft: #eef2ff;
   --idle-dot: #94a3b8;
   --radius: 10px;
 }
@@ -20,7 +22,7 @@
 }
 
 body {
-  width: 340px;
+  width: 356px;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
   background-color: var(--bg);
   color: var(--text-primary);
@@ -78,19 +80,20 @@ body {
   background-color: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 12px 14px;
+  padding: 13px 14px;
 }
 
 .card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
+  gap: 8px;
+  margin-bottom: 10px;
 }
 
 .section-label {
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--text-muted);
@@ -99,25 +102,56 @@ body {
 .status-badge {
   font-size: 11px;
   font-weight: 600;
-  padding: 2px 8px;
+  padding: 2px 9px;
   border-radius: 999px;
 }
 
-.status-badge--idle {
+.status-badge--unsupported {
   background-color: #f1f5f9;
   color: var(--text-secondary);
 }
 
-.status-badge--detected {
+.status-badge--supported {
+  background-color: var(--info-soft);
+  color: var(--info);
+}
+
+.status-badge--application {
   background-color: var(--success-soft);
   color: var(--success);
 }
 
-.detection-status {
+.detection-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.detection-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.detection-row dt {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.detection-row dd {
+  color: var(--text-primary);
+  font-weight: 600;
+  text-align: right;
+}
+
+.detection-value-with-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
 }
 
 .status-dot {
@@ -127,24 +161,25 @@ body {
   flex-shrink: 0;
 }
 
-.status-dot--idle {
+.status-dot--unsupported {
   background-color: var(--idle-dot);
 }
 
-.status-dot--detected {
+.status-dot--supported {
+  background-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.14);
+}
+
+.status-dot--application {
   background-color: var(--success);
   box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.16);
 }
 
-.platform-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.detection-hint {
-  font-size: 11.5px;
-  color: var(--text-muted);
+.detection-reason {
+  margin-top: 9px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
 }
 
 .actions {

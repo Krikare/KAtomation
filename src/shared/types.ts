@@ -1,10 +1,16 @@
 export type PlatformId = 'workday' | 'greenhouse' | 'unknown';
 
+export type DetectedPageType = 'application' | 'job_board' | 'portal' | 'unsupported';
+
 export interface PlatformDetectionResult {
-  detected: boolean;
-  platform: PlatformId;
-  label: string;
-  url?: string;
+  platformId: PlatformId;
+  platformName: string;
+  isSupported: boolean;
+  isApplicationPage: boolean;
+  pageType: DetectedPageType;
+  reason: string;
+  url: string;
+  signals?: string[];
 }
 
 export type WorkAuthorizationOption = '' | 'yes' | 'no' | 'prefer_not_to_say';
@@ -94,7 +100,8 @@ export interface ApplicationAnswer {
 
 export type ExtensionMessage =
   | { type: 'DETECT_PLATFORM' }
-  | { type: 'GET_PLATFORM_STATUS' };
+  | { type: 'GET_PLATFORM_STATUS' }
+  | { type: 'PLATFORM_DETECTION_REPORT'; detection: PlatformDetectionResult };
 
 export type ExtensionMessageResponse =
   | { ok: true; detection: PlatformDetectionResult }

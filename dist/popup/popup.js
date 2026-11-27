@@ -27,32 +27,56 @@
     sponsorshipRequired: ""
   };
   var INITIAL_DETECTION_STATE = {
-    detected: false,
-    platform: "unknown",
-    label: "Not detected"
+    platformId: "unknown",
+    platformName: "Unknown",
+    isSupported: false,
+    isApplicationPage: false,
+    pageType: "unsupported",
+    reason: "Unsupported website or no active recruitment page detected.",
+    url: ""
   };
 
   // src/popup/popup.ts
+  function formatPageLabel(pageType, isApplicationPage) {
+    if (isApplicationPage || pageType === "application") {
+      return "Job Application";
+    }
+    if (pageType === "job_board") {
+      return "Job Board / Careers";
+    }
+    if (pageType === "portal") {
+      return "Platform Portal";
+    }
+    return "Not identified";
+  }
   function renderDetectionState(detection) {
     const nameEl = document.getElementById("platform-name");
+    const pageEl = document.getElementById("page-type");
+    const supportEl = document.getElementById("support-status");
     const dotEl = document.getElementById("platform-dot");
-    const badgeEl = document.getElementById("platform-badge");
-    const hintEl = document.getElementById("platform-hint");
-    if (!nameEl || !dotEl || !badgeEl || !hintEl) {
+    const badgeEl = document.getElementById("status-badge");
+    const reasonEl = document.getElementById("detection-reason");
+    if (!nameEl || !pageEl || !supportEl || !dotEl || !badgeEl || !reasonEl) {
       return;
     }
-    if (detection.detected) {
-      nameEl.textContent = detection.label;
-      dotEl.className = "status-dot status-dot--detected";
-      badgeEl.textContent = "Detected";
-      badgeEl.className = "status-badge status-badge--detected";
-      hintEl.textContent = `Supported ATS platform recognized (${detection.label}).`;
+    const pageLabel = formatPageLabel(detection.pageType, detection.isApplicationPage);
+    const supportLabel = detection.isSupported ? "Supported" : "Unsupported website";
+    nameEl.textContent = detection.platformName;
+    pageEl.textContent = pageLabel;
+    supportEl.textContent = supportLabel;
+    reasonEl.textContent = detection.reason;
+    if (detection.isSupported && detection.isApplicationPage) {
+      dotEl.className = "status-dot status-dot--application";
+      badgeEl.textContent = "Job Application";
+      badgeEl.className = "status-badge status-badge--application";
+    } else if (detection.isSupported) {
+      dotEl.className = "status-dot status-dot--supported";
+      badgeEl.textContent = "Supported";
+      badgeEl.className = "status-badge status-badge--supported";
     } else {
-      nameEl.textContent = INITIAL_DETECTION_STATE.label;
-      dotEl.className = "status-dot status-dot--idle";
-      badgeEl.textContent = "Standby";
-      badgeEl.className = "status-badge status-badge--idle";
-      hintEl.textContent = "Supports Workday and Greenhouse application pages.";
+      dotEl.className = "status-dot status-dot--unsupported";
+      badgeEl.textContent = "Unsupported";
+      badgeEl.className = "status-badge status-badge--unsupported";
     }
   }
   async function queryPlatformStatus() {

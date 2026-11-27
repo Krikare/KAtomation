@@ -20,15 +20,32 @@
 
       <section class="card detection-card" aria-labelledby="detection-heading">
         <div class="card-header">
-          <span id="detection-heading" class="section-label">Platform Detection</span>
-          <span id="platform-badge" class="status-badge status-badge--idle">Standby</span>
+          <span id="detection-heading" class="section-label">ATS Detection</span>
+          <span id="status-badge" class="status-badge status-badge--unsupported">
+            Unsupported website
+          </span>
         </div>
-        <div class="detection-status">
-          <span id="platform-dot" class="status-dot status-dot--idle" aria-hidden="true"></span>
-          <span id="platform-name" class="platform-name">Not detected</span>
-        </div>
-        <p id="platform-hint" class="detection-hint">
-          Supports Workday and Greenhouse application pages.
+
+        <dl class="detection-rows">
+          <div class="detection-row">
+            <dt>Platform</dt>
+            <dd class="detection-value-with-dot">
+              <span id="platform-dot" class="status-dot status-dot--unsupported" aria-hidden="true"></span>
+              <span id="platform-name">Unknown</span>
+            </dd>
+          </div>
+          <div class="detection-row">
+            <dt>Page</dt>
+            <dd id="page-type">Not identified</dd>
+          </div>
+          <div class="detection-row">
+            <dt>Status</dt>
+            <dd id="support-status">Unsupported website</dd>
+          </div>
+        </dl>
+
+        <p id="detection-reason" class="detection-reason">
+          Checking active browser tab...
         </p>
       </section>
 
@@ -38,11 +55,11 @@
           class="btn btn-primary"
           type="button"
           disabled
-          title="Visual placeholder only — autofill is not enabled in Milestone 1"
+          title="Autofill will be enabled in the next milestone"
         >
           Auto-fill
         </button>
-        <p class="placeholder-note">Auto-fill is a visual placeholder in Milestone 1.</p>
+        <p class="placeholder-note">Auto-fill is not enabled in this milestone.</p>
 
         <button id="settings-btn" class="btn btn-secondary" type="button">
           <svg
