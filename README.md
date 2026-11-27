@@ -1,45 +1,106 @@
 # K{Atomation}
 
-Universal Job Application Autofill — Chrome Extension (Manifest V3).
+**K{Atomation}** is a Chrome Extension-only (Manifest V3) Universal Job Application Autofill tool written in TypeScript. Its goal is to recognize supported recruitment platforms (starting with Workday and Greenhouse) and help populate repetitive application fields using locally stored user information, while leaving resume uploads and final application submission manual.
 
-> **Current Milestone:** Milestone 1 — Extension Foundation  
-> Scope: Extension structure, Manifest V3 configuration, TypeScript build pipeline, popup UI (with passive platform detection and placeholder Auto-fill action), and local profile settings page. Form filling, backend services, and AI features are intentionally excluded from this milestone.
+> **Current Development Status:** Milestone 3 (Universal ATS Detection Engine) is complete, including the Greenhouse subdomain and DOM-detection fix. Form filling, resume upload automation, AI answering, and backend services are **not** implemented yet.
+
+---
+
+## Architecture Overview
+
+K{Atomation} enforces strict separation of concerns across browser contexts and modules:
+
+- **Shared Contracts ([src/shared/](file:///Users/karthikreddypeddala/Desktop/KAtomation/src/shared/README.md))**: Platform detection interfaces, profile/answer schemas, storage keys, and default values with no browser-API coupling.
+- **Local Persistence ([src/storage/](file:///Users/karthikreddypeddala/Desktop/KAtomation/src/storage/README.md))**: `chrome.storage.local` read/write/migration layer isolated from UI code and scoped per storage key.
+- **ATS Adapters ([src/adapters/](file:///Users/karthikreddypeddala/Desktop/KAtomation/src/adapters/README.md))**: Independent Workday and Greenhouse adapters behind a unified `ATSAdapter` contract and `registry.ts`.
+- **Content Script ([src/content/](file:///Users/karthikreddypeddala/Desktop/KAtomation/src/content/README.md))**: Passive detection on Workday and Greenhouse pages, including debounced SPA navigation handling (`popstate`, `hashchange`, `MutationObserver`) without mutating forms.
+- **Background Service Worker ([src/background/](file:///Users/karthikreddypeddala/Desktop/KAtomation/src/background/README.md))**: Seeds default storage on install, caches per-tab detections, handles restricted Chrome URLs safely, and resolves active-tab platform status for the popup.
+- **Popup UI ([src/popup/](file:///Users/karthikreddypeddala/Desktop/KAtomation/src/popup/README.md))**: Displays detected platform, page type, support status, and detection reason, plus a **Settings** button and a disabled **Auto-fill** placeholder.
+- **Options UI ([src/options/](file:///Users/karthikreddypeddala/Desktop/KAtomation/src/options/README.md))**: Five-tab settings interface for Personal Info, repeatable Education and Employment records, Professional Links, and the Application Answer Library.
+
+### Key Architectural Decisions
+
+1. **Extension-Only Local Storage (`chrome.storage.local`)**: No backend server, database, authentication, or cloud sync is used. User profiles (`katomation_user_profile`) and application answers (`katomation_application_answers`) are stored under separate keys so updating or clearing one never wipes the other.
+2. **No Invented Answers & Confirmation Flags**: The Application Answer Library starts empty and never fabricates answers. Legal/eligibility categories (`Work authorization`, `Visa sponsorship`) default `requiresConfirmation` to `true` for new answers.
+3. **Strict Hostname Validation + Page Type Distinction**: Adapters validate `http:`/`https:` URLs against strict hostname patterns rather than substring matching, and separate `application` pages from `job_board` and `portal` views.
+4. **Lightweight Build & Test Tooling**: `esbuild` bundles TypeScript entrypoints into `dist/`, `tsc --noEmit` enforces strict type-checking, and Node's built-in `node:test` + `node:assert/strict` runs detection unit tests with zero external test framework dependencies.
+
+---
 
 ## Project Structure
 
 ```text
 KAtomation/
 ├── src/
-│   ├── popup/          # Extension popup UI (HTML, CSS, TS)
-│   ├── options/        # Profile settings page (HTML, CSS, TS)
-│   ├── background/     # MV3 background service worker
-│   ├── content/        # Passive content script for ATS detection
-│   ├── adapters/       # Independent ATS platform adapters (Workday, Greenhouse)
-│   ├── storage/        # chrome.storage.local persistence layer
-│   └── shared/         # Shared types and constants
+│   ├── adapters/       # Independent ATS platform adapters & registry (Workday, Greenhouse)
+│   ├── background/     # MV3 service worker (storage init, tab cache, message routing)
+│   ├── content/        # Passive content script for DOM/URL detection & SPA updates
+│   ├── options/        # Profile & Application Answer Engine settings page
+│   ├── popup/          # Toolbar popup UI showing platform detection status
+│   ├── shared/         # Shared TypeScript interfaces, types, and constants
+│   └── storage/        # chrome.storage.local persistence & Milestone 1 migration
 ├── public/
 │   └── icons/          # Extension icons (16x16, 48x48, 128x128)
+├── tests/
+│   └── detection.test.ts  # Unit tests for ATS URL & mock-DOM detection
+├── dist/               # Built unpacked Chrome extension output (generated by build)
 ├── manifest.json       # Chrome Extension Manifest V3 configuration
-├── package.json        # Build scripts and TypeScript/bundler devDependencies
+├── package.json        # Scripts (typecheck, build, test) & devDependencies
 ├── tsconfig.json       # Strict TypeScript configuration
 └── README.md
 ```
 
-## Build Instructions
+Each folder inside `src/` contains its own `README.md` documenting its files, internal logic, and interactions.
 
-1. Install dependencies:
-   ```bash
-   npm install
-   ```
-2. Type-check and build the extension into `dist/`:
-   ```bash
-   npm run build
-   ```
+---
 
-## Load in Chrome
+## Setup, Build, and Test Instructions
+
+### Prerequisites
+
+- Node.js (tested with Node `v24.12.0`) and npm
+- Google Chrome (for loading the unpacked extension)
+
+### 1. Install Dependencies
+
+```bash
+npm install
+```
+
+### 2. Type-Check & Build
+
+```bash
+npm run typecheck
+npm run build
+```
+
+`npm run build` cleans `dist/`, runs `tsc --noEmit`, bundles `popup.ts`, `options.ts`, `background.ts`, and `content.ts` with `esbuild`, and copies `manifest.json`, `public/icons/`, HTML, and CSS assets into `dist/`.
+
+### 3. Run Unit Tests
+
+```bash
+npm test
+```
+
+This bundles `tests/detection.test.ts` with `esbuild` and executes it with `node --test`, covering Workday, Greenhouse (including `boards.greenhouse.io`, `job-boards.greenhouse.io`, `my.greenhouse.io`, regional subdomains, and modern/embedded form selectors), malformed/non-HTTP URLs, and lookalike domain rejection.
+
+### 4. Load in Chrome
 
 1. Open Chrome and navigate to `chrome://extensions`.
 2. Enable **Developer mode** (top-right toggle).
-3. Click **Load unpacked**.
-4. Select the `KAtomation/dist` directory.
-5. Pin **K{Atomation}** from the Extensions toolbar menu to open the popup, or click **Settings** in the popup to open the Profile Settings page.
+3. Click **Load unpacked** and select `KAtomation/dist`.
+4. After rebuilding `dist/`, click **Reload** on the **K{Atomation}** card in `chrome://extensions` and refresh any already-open recruitment tabs.
+
+---
+
+## Milestone History & Roadmap
+
+### Completed Milestones
+
+- **Milestone 1 — Extension Foundation**: Manifest V3 configuration, TypeScript + `esbuild` build pipeline, initial popup UI (`Not detected` state, disabled **Auto-fill** placeholder, **Settings** button), basic profile options page, `chrome.storage.local` wrapper, and initial Workday/Greenhouse adapter stubs.
+- **Milestone 2 — Universal Profile & Application Answer Engine**: Expanded `UserProfile` (`PersonalInfo`, repeatable `EducationRecord[]` and `EmploymentRecord[]` with `currentlyWorking`, `ProfessionalLinks`), added `ApplicationAnswer` library across 10 categories with confirmation flags, built the five-tab Options UI with accidental-deletion confirmations, and implemented backward-compatible storage migration.
+- **Milestone 3 — Universal ATS Detection Engine**: Implemented `PlatformDetectionResult` (`platformId`, `platformName`, `isSupported`, `isApplicationPage`, `pageType`, `reason`, `url`, `signals`), strict Workday and Greenhouse hostname + application-form detection, SPA-aware passive content script reporting, per-tab background caching with restricted-page safety, updated popup UI, `node:test` URL/DOM unit suite, and Greenhouse subdomain/modern-form detection fixes.
+
+### Upcoming Milestones (Not Yet Implemented)
+
+- **Milestone 4+ (Planned)**: Field extraction and controlled autofill execution for supported ATS platforms (starting with Workday and Greenhouse), confirmation prompts for flagged legal/eligibility answers, and additional ATS adapters (such as Lever). Resume upload and application submission will remain manual.
