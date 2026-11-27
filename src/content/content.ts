@@ -1,4 +1,5 @@
 import { detectPlatformInDocument } from '../adapters/registry';
+import { autofillWorkdayFirstName } from '../adapters/workdayAdapter';
 import type {
   ExtensionMessage,
   ExtensionMessageResponse,
@@ -84,6 +85,16 @@ chrome.runtime.onMessage.addListener(
       const detection = runDetection();
       lastReportedSignature = getDetectionSignature(detection);
       sendResponse({ ok: true, detection });
+      return false;
+    }
+
+    if (message.type === 'EXECUTE_FIRST_NAME_AUTOFILL') {
+      const result = autofillWorkdayFirstName(
+        document,
+        window.location.href,
+        message.firstName,
+      );
+      sendResponse({ ok: true, result });
       return false;
     }
 

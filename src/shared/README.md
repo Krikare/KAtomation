@@ -8,9 +8,10 @@
 
 - **`types.ts`**: Defines all shared domain models and Chrome runtime messaging types:
   - ATS detection types: `PlatformId`, `DetectedPageType`, `PlatformDetectionResult`.
+  - Autofill result types: `AutofillStatusCode` (`filled`, `missing_profile`, `missing_first_name`, `field_not_found`, `field_ambiguous`, `already_populated`, `unsupported_page`, `storage_error`, `failed`) and `AutofillFieldResult`.
   - User profile types: `PersonalInfo`, `EducationRecord`, `EmploymentType`, `EmploymentRecord`, `ProfessionalLinks`, `WorkAuthorizationOption`, `SponsorshipOption`, and `UserProfile`.
   - Application Answer Library types: `AnswerCategory` (10 categories including `work_authorization`, `sponsorship`, `salary_expectations`, etc.) and `ApplicationAnswer`.
-  - Extension messaging types: `ExtensionMessage` (`DETECT_PLATFORM`, `GET_PLATFORM_STATUS`, `PLATFORM_DETECTION_REPORT`) and `ExtensionMessageResponse`.
+  - Extension messaging types: `ExtensionMessage` (`DETECT_PLATFORM`, `GET_PLATFORM_STATUS`, `PLATFORM_DETECTION_REPORT`, `AUTOFILL_WORKDAY_FIRST_NAME`, `EXECUTE_FIRST_NAME_AUTOFILL`) and `ExtensionMessageResponse`.
 - **`constants.ts`**: Defines runtime constants and safe defaults:
   - `PRODUCT_NAME` (`'K{Atomation}'`).
   - `STORAGE_KEYS` (`USER_PROFILE` and `APPLICATION_ANSWERS`).

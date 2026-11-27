@@ -4,10 +4,12 @@ import {
 } from '../adapters/registry';
 import { DEFAULT_USER_PROFILE, STORAGE_KEYS } from '../shared/constants';
 import type {
+  AutofillFieldResult,
   ExtensionMessage,
   ExtensionMessageResponse,
   PlatformDetectionResult,
 } from '../shared/types';
+import { getSavedFirstName } from '../storage/profileStorage';
 
 const RESTRICTED_URL_PREFIXES = [
   'chrome://',
@@ -54,10 +56,13 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   }
 });
 
-async function resolveActiveTabPlatform(): Promise<ExtensionMessageResponse> {
+async function getActiveTab(): Promise<chrome.tabs.Tab | undefined> {
   const lastFocusedTabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-  const activeTab =
-    lastFocusedTabs[0] ?? (await chrome.tabs.query({ active: true, currentWindow: true }))[0];
+  return lastFocusedTabs[0] ?? (await chrome.tabs.query({ active: true, currentWindow: true }))[0];
+}
+
+async function resolveActiveTabPlatform(): Promise<ExtensionMessageResponse> {
+  const activeTab = await getActiveTab();
 
   if (!activeTab || activeTab.id === undefined) {
     return {
@@ -83,7 +88,7 @@ async function resolveActiveTabPlatform(): Promise<ExtensionMessageResponse> {
       type: 'DETECT_PLATFORM',
     } satisfies ExtensionMessage)) as ExtensionMessageResponse | undefined;
 
-    if (response?.ok) {
+    if (response?.ok && 'detection' in response) {
       tabDetectionCache.set(activeTab.id, response.detection);
       return response;
     }
@@ -111,6 +116,81 @@ async function resolveActiveTabPlatform(): Promise<ExtensionMessageResponse> {
   };
 }
 
+function autofillResultResponse(result: AutofillFieldResult): ExtensionMessageResponse {
+  return { ok: true, result };
+}
+
+async function handleWorkdayFirstNameAutofill(): Promise<ExtensionMessageResponse> {
+  const activeTab = await getActiveTab();
+  if (!activeTab || activeTab.id === undefined) {
+    return autofillResultResponse({
+      ok: false,
+      status: 'failed',
+      field: 'firstName',
+      message: 'No active browser tab found.',
+    });
+  }
+
+  const platformStatus = await resolveActiveTabPlatform();
+  if (!platformStatus.ok || !('detection' in platformStatus)) {
+    return autofillResultResponse({
+      ok: false,
+      status: 'failed',
+      field: 'firstName',
+      message: 'Unable to verify current page platform.',
+    });
+  }
+
+  const { detection } = platformStatus;
+  if (
+    detection.platformId !== 'workday' ||
+    !detection.isSupported ||
+    !detection.isApplicationPage
+  ) {
+    return autofillResultResponse({
+      ok: false,
+      status: 'unsupported_page',
+      field: 'firstName',
+      message: 'Autofill is only supported on Workday application pages.',
+    });
+  }
+
+  const firstNameLookup = await getSavedFirstName();
+  if (!firstNameLookup.ok) {
+    return autofillResultResponse({
+      ok: false,
+      status: firstNameLookup.status,
+      field: 'firstName',
+      message: firstNameLookup.message,
+    });
+  }
+
+  try {
+    const response = (await chrome.tabs.sendMessage(activeTab.id, {
+      type: 'EXECUTE_FIRST_NAME_AUTOFILL',
+      firstName: firstNameLookup.firstName,
+    } satisfies ExtensionMessage)) as ExtensionMessageResponse | undefined;
+
+    if (response?.ok && 'result' in response) {
+      return response;
+    }
+
+    return autofillResultResponse({
+      ok: false,
+      status: 'failed',
+      field: 'firstName',
+      message: 'Autofill failed.',
+    });
+  } catch {
+    return autofillResultResponse({
+      ok: false,
+      status: 'failed',
+      field: 'firstName',
+      message: 'Autofill failed. Reload the Workday tab and try again.',
+    });
+  }
+}
+
 chrome.runtime.onMessage.addListener(
   (
     message: ExtensionMessage,
@@ -131,6 +211,23 @@ chrome.runtime.onMessage.addListener(
         .catch((error: unknown) => {
           const messageText = error instanceof Error ? error.message : 'Unable to detect platform';
           sendResponse({ ok: false, error: messageText });
+        });
+      return true;
+    }
+
+    if (message.type === 'AUTOFILL_WORKDAY_FIRST_NAME') {
+      void handleWorkdayFirstNameAutofill()
+        .then(sendResponse)
+        .catch((error: unknown) => {
+          const messageText = error instanceof Error ? error.message : 'Autofill failed.';
+          sendResponse(
+            autofillResultResponse({
+              ok: false,
+              status: 'failed',
+              field: 'firstName',
+              message: messageText,
+            }),
+          );
         });
       return true;
     }

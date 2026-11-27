@@ -218,6 +218,50 @@ function formatStorageError(action: string, error: unknown): Error {
   return new Error(`Storage error while ${action}: ${detail}`);
 }
 
+export type SavedFirstNameLookup =
+  | { ok: true; firstName: string }
+  | {
+      ok: false;
+      status: 'missing_profile' | 'missing_first_name' | 'storage_error';
+      message: string;
+    };
+
+/**
+ * Reads only the saved First Name from the existing user profile key in chrome.storage.local.
+ * Handles missing profile, missing/empty First Name, and storage errors cleanly.
+ */
+export async function getSavedFirstName(): Promise<SavedFirstNameLookup> {
+  try {
+    const result = await chrome.storage.local.get(STORAGE_KEYS.USER_PROFILE);
+    const raw = result[STORAGE_KEYS.USER_PROFILE];
+    if (!raw || typeof raw !== 'object') {
+      return {
+        ok: false,
+        status: 'missing_profile',
+        message: 'No saved profile found. Open Settings to add your First Name.',
+      };
+    }
+
+    const profile = normalizeUserProfile(raw);
+    const firstName = profile.personal.firstName.trim();
+    if (!firstName) {
+      return {
+        ok: false,
+        status: 'missing_first_name',
+        message: 'First Name is missing from your profile.',
+      };
+    }
+
+    return { ok: true, firstName };
+  } catch (error) {
+    return {
+      ok: false,
+      status: 'storage_error',
+      message: formatStorageError('loading First Name', error).message,
+    };
+  }
+}
+
 /**
  * Reads the locally stored user profile from chrome.storage.local.
  * Preserves Milestone 1 fields and provides safe defaults for newly introduced fields.

@@ -55,11 +55,20 @@
           class="btn btn-primary"
           type="button"
           disabled
-          title="Autofill will be enabled in the next milestone"
+          title="Enabled on Workday application pages (First Name autofill)"
         >
           Auto-fill
         </button>
-        <p class="placeholder-note">Auto-fill is not enabled in this milestone.</p>
+        <p id="autofill-note" class="placeholder-note">
+          Auto-fill is enabled on Workday application pages (First Name only).
+        </p>
+        <p
+          id="autofill-feedback"
+          class="autofill-feedback"
+          role="status"
+          aria-live="polite"
+          hidden
+        ></p>
 
         <button id="settings-btn" class="btn btn-secondary" type="button">
           <svg

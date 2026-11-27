@@ -386,7 +386,270 @@
         signals: []
       };
     }
+    autofillFirstName(doc, url, firstName) {
+      return autofillWorkdayFirstName(doc, url, firstName, this);
+    }
   };
+  var DISALLOWED_INPUT_TYPES = /* @__PURE__ */ new Set([
+    "hidden",
+    "checkbox",
+    "radio",
+    "file",
+    "submit",
+    "button",
+    "reset",
+    "image"
+  ]);
+  var DISALLOWED_AUTOCOMPLETE_VALUES = /* @__PURE__ */ new Set([
+    "family-name",
+    "additional-name",
+    "name",
+    "email",
+    "tel",
+    "organization",
+    "street-address",
+    "postal-code",
+    "username",
+    "new-password",
+    "current-password"
+  ]);
+  var NEGATIVE_FIELD_PATTERN = /\b(?:last|middle|family|surname|full\s*name|fullname|preferred|emergency|reference|referral|manager|supervisor|email|phone|mobile|address|street|city|state|postal|zip|country)\b|(?:last|middle|family|surname|preferred)name/i;
+  var EXACT_FIRST_NAME_LABEL_PATTERN = /^(?:legal\s+)?(?:first|given)\s*name$/i;
+  var TIER1_FIRST_NAME_SELECTORS = [
+    'input[data-automation-id="legalNameSection_firstName"]',
+    '[data-automation-id="legalNameSection_firstName"] input',
+    '[data-automation-id="formField-legalNameSection_firstName"] input',
+    'input[name="legalName--firstName"]',
+    'input[id="legalName--firstName"]',
+    'input[id="name--legalName--firstName"]'
+  ];
+  var TIER2_FIRST_NAME_SELECTORS = [
+    'input[data-automation-id="firstName"]',
+    '[data-automation-id="formField-firstName"] input',
+    'input[autocomplete="given-name"]',
+    'input[name="firstName"]',
+    'input[id="firstName"]',
+    'input[name="first_name"]',
+    'input[id="first_name"]',
+    'input[name="first-name"]',
+    'input[id="first-name"]'
+  ];
+  function escapeSelectorAttr(value) {
+    return value.replace(/["\\]/g, "\\$&");
+  }
+  function normalizeLabelText(raw) {
+    return raw.replace(/\*/g, " ").replace(/\(required\)|\brequired\b/gi, " ").replace(/\s+/g, " ").trim().toLowerCase();
+  }
+  function queryElements(root, selector) {
+    if (typeof root.querySelectorAll === "function") {
+      return Array.from(root.querySelectorAll(selector));
+    }
+    const single = root.querySelector(selector);
+    return single ? [single] : [];
+  }
+  function getAccessibleLabel(doc, input) {
+    const ariaLabel = input.getAttribute?.("aria-label");
+    if (ariaLabel && ariaLabel.trim()) {
+      return ariaLabel.trim();
+    }
+    const labelledBy = input.getAttribute?.("aria-labelledby");
+    if (labelledBy && labelledBy.trim()) {
+      const parts = labelledBy.trim().split(/\s+/).map((id) => doc.querySelector(`#${escapeSelectorAttr(id)}`)?.textContent?.trim() ?? "").filter((text) => text.length > 0);
+      if (parts.length > 0) {
+        return parts.join(" ");
+      }
+    }
+    if (input.id) {
+      const explicitLabel = doc.querySelector(`label[for="${escapeSelectorAttr(input.id)}"]`);
+      if (explicitLabel?.textContent?.trim()) {
+        return explicitLabel.textContent.trim();
+      }
+    }
+    const wrappingLabel = typeof input.closest === "function" ? input.closest("label") : null;
+    if (wrappingLabel?.textContent?.trim()) {
+      return wrappingLabel.textContent.trim();
+    }
+    const fieldWrapper = typeof input.closest === "function" ? input.closest('[data-automation-id^="formField-"]') : null;
+    if (fieldWrapper && typeof fieldWrapper.querySelectorAll === "function") {
+      const nestedInputs = fieldWrapper.querySelectorAll("input");
+      if (nestedInputs.length === 1) {
+        const formLabel = fieldWrapper.querySelector('[data-automation-id="formLabel"]') ?? fieldWrapper.querySelector("label");
+        if (formLabel?.textContent?.trim()) {
+          return formLabel.textContent.trim();
+        }
+      }
+    }
+    return "";
+  }
+  function isEligibleFirstNameInput(doc, candidate) {
+    const input = candidate;
+    if (input.tagName && input.tagName.toUpperCase() !== "INPUT") {
+      return false;
+    }
+    const rawType = (input.getAttribute?.("type") ?? input.type ?? "text").toLowerCase();
+    if (DISALLOWED_INPUT_TYPES.has(rawType)) {
+      return false;
+    }
+    if (input.disabled || input.readOnly || input.hidden || input.getAttribute?.("aria-hidden") === "true") {
+      return false;
+    }
+    const autocomplete = (input.getAttribute?.("autocomplete") ?? "").trim().toLowerCase();
+    if (autocomplete && DISALLOWED_AUTOCOMPLETE_VALUES.has(autocomplete)) {
+      return false;
+    }
+    const labelText = getAccessibleLabel(doc, input);
+    const metadataToInspect = [
+      input.id ?? "",
+      input.name ?? "",
+      input.getAttribute?.("data-automation-id") ?? "",
+      input.getAttribute?.("aria-label") ?? "",
+      labelText
+    ].join(" ");
+    if (NEGATIVE_FIELD_PATTERN.test(metadataToInspect)) {
+      return false;
+    }
+    return true;
+  }
+  function collectTierMatches(doc, selectors) {
+    const unique = /* @__PURE__ */ new Set();
+    let matchedSelector = "";
+    for (const selector of selectors) {
+      for (const el of queryElements(doc, selector)) {
+        if (isEligibleFirstNameInput(doc, el)) {
+          if (!matchedSelector) {
+            matchedSelector = selector;
+          }
+          unique.add(el);
+        }
+      }
+    }
+    return { elements: Array.from(unique), matchedSelector };
+  }
+  function findWorkdayFirstNameField(doc) {
+    const tier1 = collectTierMatches(doc, TIER1_FIRST_NAME_SELECTORS);
+    if (tier1.elements.length === 1 && tier1.elements[0]) {
+      return { status: "found", element: tier1.elements[0], matchedBy: tier1.matchedSelector };
+    }
+    if (tier1.elements.length > 1) {
+      return {
+        status: "ambiguous",
+        reason: "Multiple First Name fields detected; unable to determine a unique target."
+      };
+    }
+    const tier2 = collectTierMatches(doc, TIER2_FIRST_NAME_SELECTORS);
+    if (tier2.elements.length === 1 && tier2.elements[0]) {
+      return { status: "found", element: tier2.elements[0], matchedBy: tier2.matchedSelector };
+    }
+    if (tier2.elements.length > 1) {
+      return {
+        status: "ambiguous",
+        reason: "Multiple First Name fields detected; unable to determine a unique target."
+      };
+    }
+    const labelMatches = /* @__PURE__ */ new Set();
+    for (const el of queryElements(doc, "input")) {
+      if (!isEligibleFirstNameInput(doc, el)) {
+        continue;
+      }
+      const normalizedLabel = normalizeLabelText(getAccessibleLabel(doc, el));
+      if (normalizedLabel && EXACT_FIRST_NAME_LABEL_PATTERN.test(normalizedLabel)) {
+        labelMatches.add(el);
+      }
+    }
+    const resolved = Array.from(labelMatches);
+    if (resolved.length === 1 && resolved[0]) {
+      return { status: "found", element: resolved[0], matchedBy: "label:first-name" };
+    }
+    if (resolved.length > 1) {
+      return {
+        status: "ambiguous",
+        reason: "Multiple First Name fields detected; unable to determine a unique target."
+      };
+    }
+    return {
+      status: "not_found",
+      reason: "First Name field could not be identified."
+    };
+  }
+  function setInputValueAndDispatchEvents(input, value) {
+    if (typeof input.focus === "function") {
+      input.focus();
+    }
+    const prototypeSetter = typeof HTMLInputElement !== "undefined" && input instanceof HTMLInputElement ? Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set : void 0;
+    if (prototypeSetter) {
+      prototypeSetter.call(input, value);
+    } else {
+      input.value = value;
+    }
+    if (typeof input.dispatchEvent === "function" && typeof Event === "function") {
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+  }
+  function autofillWorkdayFirstName(doc, url, firstName, adapter = new WorkdayAdapter()) {
+    if (!adapter.isSupportedUrl(url)) {
+      return {
+        ok: false,
+        status: "unsupported_page",
+        field: "firstName",
+        message: "Autofill is only supported on Workday application pages."
+      };
+    }
+    const detection = adapter.detectFromDocument(doc, url);
+    if (detection.platformId !== "workday" || !detection.isSupported || !detection.isApplicationPage) {
+      return {
+        ok: false,
+        status: "unsupported_page",
+        field: "firstName",
+        message: "Autofill is only supported on Workday application pages."
+      };
+    }
+    const trimmedFirstName = firstName.trim();
+    if (!trimmedFirstName) {
+      return {
+        ok: false,
+        status: "missing_first_name",
+        field: "firstName",
+        message: "First Name is missing from your profile."
+      };
+    }
+    const lookup = findWorkdayFirstNameField(doc);
+    if (lookup.status !== "found") {
+      return {
+        ok: false,
+        status: lookup.status === "ambiguous" ? "field_ambiguous" : "field_not_found",
+        field: "firstName",
+        message: lookup.reason
+      };
+    }
+    const currentValue = (lookup.element.value ?? "").trim();
+    if (currentValue.length > 0) {
+      return {
+        ok: false,
+        status: "already_populated",
+        field: "firstName",
+        message: "Field already contains a value.",
+        matchedBy: lookup.matchedBy
+      };
+    }
+    try {
+      setInputValueAndDispatchEvents(lookup.element, trimmedFirstName);
+      return {
+        ok: true,
+        status: "filled",
+        field: "firstName",
+        message: "First Name filled successfully.",
+        matchedBy: lookup.matchedBy
+      };
+    } catch {
+      return {
+        ok: false,
+        status: "failed",
+        field: "firstName",
+        message: "Autofill failed."
+      };
+    }
+  }
 
   // src/adapters/registry.ts
   var ATS_ADAPTERS = [
@@ -482,6 +745,15 @@
         const detection = runDetection();
         lastReportedSignature = getDetectionSignature(detection);
         sendResponse({ ok: true, detection });
+        return false;
+      }
+      if (message.type === "EXECUTE_FIRST_NAME_AUTOFILL") {
+        const result = autofillWorkdayFirstName(
+          document,
+          window.location.href,
+          message.firstName
+        );
+        sendResponse({ ok: true, result });
         return false;
       }
       return false;

@@ -9,7 +9,7 @@
     "build:js": "esbuild src/popup/popup.ts src/options/options.ts src/background/background.ts src/content/content.ts --bundle --outdir=dist --outbase=src --format=iife --target=chrome120",
     "build:assets": "mkdir -p dist/popup dist/options && cp manifest.json dist/ && cp -r public/. dist/ && cp src/popup/popup.html src/popup/popup.css dist/popup/ && cp src/options/options.html src/options/options.css dist/options/",
     "build": "npm run clean && npm run typecheck && npm run build:js && npm run build:assets",
-    "test": "esbuild tests/detection.test.ts --bundle --platform=node --format=esm --outfile=.test-dist/detection.test.mjs && node --test .test-dist/detection.test.mjs && rm -rf .test-dist"
+    "test": "esbuild tests/detection.test.ts tests/workdayFirstNameAutofill.test.ts --bundle --platform=node --format=esm --outdir=.test-dist --out-extension:.js=.mjs && node --test .test-dist/*.mjs && rm -rf .test-dist"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.287",

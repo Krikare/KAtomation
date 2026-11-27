@@ -8,6 +8,7 @@
 
 - **`profileStorage.ts`**: Exports the extension's local persistence API:
   - `getUserProfile()`: Reads `katomation_user_profile` and normalizes it into a complete `UserProfile` with safe defaults.
+  - `getSavedFirstName()`: Reads `katomation_user_profile` via `STORAGE_KEYS.USER_PROFILE` and returns a discriminated `SavedFirstNameLookup` result (`ok`, `missing_profile`, `missing_first_name`, or `storage_error`) without creating duplicate keys.
   - `saveUserProfile(profile)`: Merges and normalizes `UserProfile`, attaches an `updatedAt` ISO timestamp, preserves existing `workAuthorized` / `sponsorshipRequired` metadata if unset, and writes only `katomation_user_profile`.
   - `clearUserProfile()`: Removes only `katomation_user_profile` from `chrome.storage.local` so saved application answers remain intact.
   - `getApplicationAnswers()`: Reads `katomation_application_answers` and returns normalized `ApplicationAnswer[]` records.
@@ -22,4 +23,6 @@
 ## Interactions with Other Modules
 
 - Uses types and defaults from **`src/shared/`** (`types.ts`, `constants.ts`).
-- Called directly by **`src/options/options.ts`** when loading, saving, or clearing the user's profile and application answer library.
+- Called by **`src/options/options.ts`** when loading, saving, or clearing the user's profile and application answer library.
+- Called by **`src/background/background.ts`** (`getSavedFirstName()`) during Milestone 4.1 Workday First Name autofill.
+- Tested directly by **`tests/workdayFirstNameAutofill.test.ts`**.

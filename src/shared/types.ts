@@ -98,11 +98,33 @@ export interface ApplicationAnswer {
   updatedAt: string;
 }
 
+export type AutofillStatusCode =
+  | 'filled'
+  | 'missing_profile'
+  | 'missing_first_name'
+  | 'field_not_found'
+  | 'field_ambiguous'
+  | 'already_populated'
+  | 'unsupported_page'
+  | 'storage_error'
+  | 'failed';
+
+export interface AutofillFieldResult {
+  ok: boolean;
+  status: AutofillStatusCode;
+  field: 'firstName';
+  message: string;
+  matchedBy?: string;
+}
+
 export type ExtensionMessage =
   | { type: 'DETECT_PLATFORM' }
   | { type: 'GET_PLATFORM_STATUS' }
-  | { type: 'PLATFORM_DETECTION_REPORT'; detection: PlatformDetectionResult };
+  | { type: 'PLATFORM_DETECTION_REPORT'; detection: PlatformDetectionResult }
+  | { type: 'AUTOFILL_WORKDAY_FIRST_NAME' }
+  | { type: 'EXECUTE_FIRST_NAME_AUTOFILL'; firstName: string };
 
 export type ExtensionMessageResponse =
   | { ok: true; detection: PlatformDetectionResult }
+  | { ok: true; result: AutofillFieldResult }
   | { ok: false; error: string };
