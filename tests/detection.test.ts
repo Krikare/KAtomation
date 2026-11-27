@@ -92,6 +92,37 @@ test('GreenhouseAdapter: detects supported Greenhouse domains and distinguishes 
   assert.equal(euBoard.isSupported, true);
   assert.equal(euBoard.isApplicationPage, true);
   assert.equal(euBoard.pageType, 'application');
+
+  const multiRegionBoard = detectPlatformFromUrl(
+    'https://boards.eu-central.greenhouse.io/acme/jobs/789/apply',
+  );
+  assert.equal(multiRegionBoard.platformId, 'greenhouse');
+  assert.equal(multiRegionBoard.isSupported, true);
+  assert.equal(multiRegionBoard.isApplicationPage, true);
+
+  const prefixedRegionBoard = detectPlatformFromUrl('https://eu.boards.greenhouse.io/acme');
+  assert.equal(prefixedRegionBoard.platformId, 'greenhouse');
+  assert.equal(prefixedRegionBoard.isSupported, true);
+  assert.equal(prefixedRegionBoard.isApplicationPage, false);
+  assert.equal(prefixedRegionBoard.pageType, 'job_board');
+
+  const myGreenhousePortal = detectPlatformFromUrl('https://my.greenhouse.io/');
+  assert.equal(myGreenhousePortal.platformId, 'greenhouse');
+  assert.equal(myGreenhousePortal.isSupported, true);
+  assert.equal(myGreenhousePortal.isApplicationPage, false);
+  assert.equal(myGreenhousePortal.pageType, 'portal');
+
+  const myGreenhouseJob = detectPlatformFromUrl('https://my.greenhouse.io/jobs/12345');
+  assert.equal(myGreenhouseJob.platformId, 'greenhouse');
+  assert.equal(myGreenhouseJob.isSupported, true);
+  assert.equal(myGreenhouseJob.isApplicationPage, false);
+  assert.equal(myGreenhouseJob.pageType, 'job_board');
+
+  const myGreenhouseApply = detectPlatformFromUrl('https://my.greenhouse.io/jobs/12345/apply');
+  assert.equal(myGreenhouseApply.platformId, 'greenhouse');
+  assert.equal(myGreenhouseApply.isSupported, true);
+  assert.equal(myGreenhouseApply.isApplicationPage, true);
+  assert.equal(myGreenhouseApply.pageType, 'application');
 });
 
 test('GreenhouseAdapter: rejects substring false positives on unrelated domains', () => {
@@ -152,6 +183,33 @@ test('Document detection: upgrades job pages to application pages when DOM appli
   assert.equal(ghResult.isApplicationPage, true);
   assert.equal(ghResult.pageType, 'application');
 
+  const modernGreenhouseDoc = createMockDocument(['form#application-form']);
+  const modernGhResult = detectPlatformInDocument(
+    modernGreenhouseDoc,
+    'https://job-boards.greenhouse.io/acme/jobs/123',
+  );
+  assert.equal(modernGhResult.platformId, 'greenhouse');
+  assert.equal(modernGhResult.isSupported, true);
+  assert.equal(modernGhResult.isApplicationPage, true);
+  assert.equal(modernGhResult.pageType, 'application');
+
+  const multiFormDoc = {
+    querySelector: () => null,
+    querySelectorAll(selector: string) {
+      if (selector === 'form[action]') {
+        return [
+          { getAttribute: () => '/search' },
+          { getAttribute: () => 'https://boards.greenhouse.io/acme/jobs/123' },
+        ];
+      }
+      return [];
+    },
+  } as unknown as Document;
+  const embeddedResult = detectPlatformInDocument(multiFormDoc, 'https://acme.com/careers');
+  assert.equal(embeddedResult.platformId, 'greenhouse');
+  assert.equal(embeddedResult.isSupported, true);
+  assert.equal(embeddedResult.isApplicationPage, true);
+
   const emptyDoc = createMockDocument([]);
   const unrelatedResult = detectPlatformInDocument(emptyDoc, 'https://example.com/careers');
   assert.equal(unrelatedResult.platformId, 'unknown');
@@ -168,5 +226,7 @@ test('Adapter isSupportedUrl validates subdomain variations cleanly', () => {
 
   assert.equal(greenhouse.isSupportedUrl('https://boards.greenhouse.io/acme'), true);
   assert.equal(greenhouse.isSupportedUrl('https://job-boards.eu.greenhouse.io/acme'), true);
+  assert.equal(greenhouse.isSupportedUrl('https://my.greenhouse.io/jobs/123'), true);
+  assert.equal(greenhouse.isSupportedUrl('https://boards.eu-central.greenhouse.io/acme'), true);
   assert.equal(greenhouse.isSupportedUrl('https://app.greenhouse.io/dashboard'), false);
 });

@@ -65,7 +65,7 @@ function initContentDetection(): void {
   window.addEventListener('popstate', scheduleDetectionCheck);
   window.addEventListener('hashchange', scheduleDetectionCheck);
 
-  const root = document.body ?? document.documentElement;
+  const root = document.documentElement ?? document.body;
   if (root) {
     const observer = new MutationObserver(() => {
       scheduleDetectionCheck();

@@ -1,17 +1,25 @@
 import type { PlatformDetectionResult } from '../shared/types';
 import type { ATSAdapter } from './baseAdapter';
 
-const GREENHOUSE_BOARD_HOST_PATTERN = /^(?:boards|job-boards)(?:\.[a-z]{2})?\.greenhouse\.io$/i;
+const GREENHOUSE_BOARD_HOST_PATTERN =
+  /^(?:[a-z0-9-]+\.)*(?:boards|job-boards|my)(?:\.[a-z0-9-]+)*\.greenhouse\.io$/i;
+const GREENHOUSE_PORTAL_HOST_PATTERN = /^(?:[a-z0-9-]+\.)*my(?:\.[a-z0-9-]+)*\.greenhouse\.io$/i;
 const GREENHOUSE_ACTION_HOST_PATTERN = /^(?:[a-z0-9-]+\.)*greenhouse\.io$/i;
 
-const GREENHOUSE_APPLY_PATH_PATTERN = /(?:^|\/)apply(?:\/|$)/i;
-const GREENHOUSE_APPLY_HASH_PATTERN = /^#(?:app|application|application_form)$/i;
-const GREENHOUSE_JOB_PATH_PATTERN = /^\/[^/]+\/jobs\/[^/]+/i;
+const GREENHOUSE_APPLY_PATH_PATTERN = /(?:^|\/)(?:apply|application)(?:\/|$)/i;
+const GREENHOUSE_APPLY_HASH_PATTERN = /^#(?:app|application|application_form|application-form)$/i;
+const GREENHOUSE_JOB_PATH_PATTERN =
+  /^\/(?:[^/]+\/jobs\/[^/]+|jobs\/[^/]+|view_job|embed\/job_app)/i;
 
 const GREENHOUSE_APPLICATION_SELECTORS = [
   'form#application_form',
+  'form#application-form',
   'input[name="job_application[first_name]"]',
   'input[name^="job_application["]',
+  '#application-form input#first_name',
+  '#application-form input#email',
+  '#application_form input#first_name',
+  'form.application--form input#email',
 ] as const;
 
 function parseHttpUrl(rawUrl: string): URL | null {
@@ -27,20 +35,40 @@ function parseHttpUrl(rawUrl: string): URL | null {
 }
 
 function hasEmbeddedGreenhouseForm(doc: Document): boolean {
-  const form = doc.querySelector<HTMLFormElement>('form#application_form, form[action]');
-  if (form) {
-    const action = form.getAttribute('action');
+  if (typeof doc.querySelectorAll === 'function') {
+    const forms = doc.querySelectorAll('form[action]');
+    for (const form of Array.from(forms)) {
+      const action = form.getAttribute('action');
+      if (action) {
+        const parsedAction = parseHttpUrl(action);
+        if (parsedAction && GREENHOUSE_ACTION_HOST_PATTERN.test(parsedAction.hostname)) {
+          return true;
+        }
+      }
+    }
+
+    const iframes = doc.querySelectorAll('iframe[src]');
+    for (const iframe of Array.from(iframes)) {
+      const src = iframe.getAttribute('src');
+      if (src) {
+        const parsedSrc = parseHttpUrl(src);
+        if (parsedSrc && GREENHOUSE_BOARD_HOST_PATTERN.test(parsedSrc.hostname)) {
+          return true;
+        }
+      }
+    }
+  } else {
+    const form = doc.querySelector<HTMLFormElement>('form#application_form, form[action]');
+    const action = form?.getAttribute('action');
     if (action) {
       const parsedAction = parseHttpUrl(action);
       if (parsedAction && GREENHOUSE_ACTION_HOST_PATTERN.test(parsedAction.hostname)) {
         return true;
       }
     }
-  }
 
-  const iframe = doc.querySelector<HTMLIFrameElement>('iframe[src]');
-  if (iframe) {
-    const src = iframe.getAttribute('src');
+    const iframe = doc.querySelector<HTMLIFrameElement>('iframe[src]');
+    const src = iframe?.getAttribute('src');
     if (src) {
       const parsedSrc = parseHttpUrl(src);
       if (parsedSrc && GREENHOUSE_BOARD_HOST_PATTERN.test(parsedSrc.hostname)) {
@@ -79,6 +107,8 @@ export class GreenhouseAdapter implements ATSAdapter {
         signals.push('path:application-route');
       } else if (GREENHOUSE_JOB_PATH_PATTERN.test(parsed.pathname)) {
         signals.push('path:job-posting');
+      } else if (GREENHOUSE_PORTAL_HOST_PATTERN.test(parsed.hostname)) {
+        signals.push('path:candidate-portal');
       } else {
         signals.push('path:job-board');
       }
@@ -114,6 +144,7 @@ export class GreenhouseAdapter implements ATSAdapter {
     }
 
     const isSupportedHost = GREENHOUSE_BOARD_HOST_PATTERN.test(parsed.hostname);
+    const isPortalHost = GREENHOUSE_PORTAL_HOST_PATTERN.test(parsed.hostname);
     const signals = this.getPageSignals(doc, url);
 
     const hasDomApplicationForm = Boolean(
@@ -158,6 +189,20 @@ export class GreenhouseAdapter implements ATSAdapter {
     }
 
     const isJobPosting = GREENHOUSE_JOB_PATH_PATTERN.test(parsed.pathname);
+    if (isPortalHost && !isJobPosting) {
+      return {
+        platformId: this.id,
+        platformName: this.displayName,
+        isSupported: true,
+        isApplicationPage: false,
+        pageType: 'portal',
+        reason:
+          'Greenhouse candidate portal detected, but no active job posting or application form was found.',
+        url,
+        signals,
+      };
+    }
+
     return {
       platformId: this.id,
       platformName: this.displayName,

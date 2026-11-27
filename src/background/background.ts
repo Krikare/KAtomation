@@ -55,7 +55,9 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
 });
 
 async function resolveActiveTabPlatform(): Promise<ExtensionMessageResponse> {
-  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const lastFocusedTabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+  const activeTab =
+    lastFocusedTabs[0] ?? (await chrome.tabs.query({ active: true, currentWindow: true }))[0];
 
   if (!activeTab || activeTab.id === undefined) {
     return {
