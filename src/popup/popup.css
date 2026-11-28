@@ -243,13 +243,34 @@ body {
   margin-bottom: 2px;
 }
 
+.autofill-feedback-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.autofill-feedback-list[hidden] {
+  display: none;
+}
+
 .autofill-feedback {
   font-size: 12px;
   font-weight: 500;
-  padding: 8px 10px;
+  padding: 7px 10px;
   border-radius: 8px;
   border: 1px solid var(--border);
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.autofill-feedback-label {
+  font-weight: 700;
+}
+
+.autofill-feedback-status {
+  text-align: right;
 }
 
 .autofill-feedback--success {

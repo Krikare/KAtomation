@@ -98,10 +98,13 @@ export interface ApplicationAnswer {
   updatedAt: string;
 }
 
+export type AutofillFieldKey = 'firstName' | 'lastName' | 'email';
+
 export type AutofillStatusCode =
   | 'filled'
   | 'missing_profile'
   | 'missing_first_name'
+  | 'missing_value'
   | 'field_not_found'
   | 'field_ambiguous'
   | 'already_populated'
@@ -112,9 +115,21 @@ export type AutofillStatusCode =
 export interface AutofillFieldResult {
   ok: boolean;
   status: AutofillStatusCode;
-  field: 'firstName';
+  field: AutofillFieldKey;
+  label?: string;
   message: string;
   matchedBy?: string;
+}
+
+export interface WorkdayBasicProfileValues {
+  firstName: string;
+  lastName: string;
+  email: string;
+}
+
+export interface WorkdayAutofillBatchResult {
+  ok: boolean;
+  results: AutofillFieldResult[];
 }
 
 export type ExtensionMessage =
@@ -122,9 +137,12 @@ export type ExtensionMessage =
   | { type: 'GET_PLATFORM_STATUS' }
   | { type: 'PLATFORM_DETECTION_REPORT'; detection: PlatformDetectionResult }
   | { type: 'AUTOFILL_WORKDAY_FIRST_NAME' }
-  | { type: 'EXECUTE_FIRST_NAME_AUTOFILL'; firstName: string };
+  | { type: 'EXECUTE_FIRST_NAME_AUTOFILL'; firstName: string }
+  | { type: 'AUTOFILL_WORKDAY_FIELDS' }
+  | { type: 'EXECUTE_WORKDAY_FIELDS_AUTOFILL'; values: WorkdayBasicProfileValues };
 
 export type ExtensionMessageResponse =
   | { ok: true; detection: PlatformDetectionResult }
   | { ok: true; result: AutofillFieldResult }
+  | { ok: true; batch: WorkdayAutofillBatchResult }
   | { ok: false; error: string };

@@ -17,6 +17,7 @@ import type {
   SponsorshipOption,
   UserProfile,
   WorkAuthorizationOption,
+  WorkdayBasicProfileValues,
 } from '../shared/types';
 
 interface LegacyMilestone1Profile {
@@ -216,6 +217,48 @@ function normalizeApplicationAnswer(raw: unknown): ApplicationAnswer | null {
 function formatStorageError(action: string, error: unknown): Error {
   const detail = error instanceof Error ? error.message : String(error);
   return new Error(`Storage error while ${action}: ${detail}`);
+}
+
+export type WorkdayBasicProfileLookup =
+  | { ok: true; values: WorkdayBasicProfileValues }
+  | {
+      ok: false;
+      status: 'missing_profile' | 'storage_error';
+      message: string;
+    };
+
+/**
+ * Reads First Name, Last Name, and Email from the existing user profile key in chrome.storage.local.
+ * Handles missing profile and storage errors without introducing duplicate storage keys.
+ */
+export async function getWorkdayBasicProfileValues(): Promise<WorkdayBasicProfileLookup> {
+  try {
+    const result = await chrome.storage.local.get(STORAGE_KEYS.USER_PROFILE);
+    const raw = result[STORAGE_KEYS.USER_PROFILE];
+    if (!raw || typeof raw !== 'object') {
+      return {
+        ok: false,
+        status: 'missing_profile',
+        message: 'No saved profile found. Open Settings to add your profile details.',
+      };
+    }
+
+    const profile = normalizeUserProfile(raw);
+    return {
+      ok: true,
+      values: {
+        firstName: profile.personal.firstName.trim(),
+        lastName: profile.personal.lastName.trim(),
+        email: profile.personal.email.trim(),
+      },
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      status: 'storage_error',
+      message: formatStorageError('loading profile values', error).message,
+    };
+  }
 }
 
 export type SavedFirstNameLookup =

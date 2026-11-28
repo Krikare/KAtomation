@@ -227,6 +227,228 @@
     }
   };
 
+  // src/adapters/autofillUtils.ts
+  var DISALLOWED_INPUT_TYPES = /* @__PURE__ */ new Set([
+    "hidden",
+    "checkbox",
+    "radio",
+    "file",
+    "submit",
+    "button",
+    "reset",
+    "image",
+    "password"
+  ]);
+  var DEFAULT_ALLOWED_INPUT_TYPES = /* @__PURE__ */ new Set(["", "text"]);
+  function escapeSelectorAttr(value) {
+    return value.replace(/["\\]/g, "\\$&");
+  }
+  function normalizeLabelText(raw) {
+    return raw.replace(/\*/g, " ").replace(/\(required\)|\brequired\b/gi, " ").replace(/\s+/g, " ").trim().toLowerCase();
+  }
+  function queryElements(root, selector) {
+    if (typeof root.querySelectorAll === "function") {
+      return Array.from(root.querySelectorAll(selector));
+    }
+    const single = root.querySelector(selector);
+    return single ? [single] : [];
+  }
+  function getAccessibleLabel(doc, input) {
+    const ariaLabel = input.getAttribute?.("aria-label");
+    if (ariaLabel && ariaLabel.trim()) {
+      return ariaLabel.trim();
+    }
+    const labelledBy = input.getAttribute?.("aria-labelledby");
+    if (labelledBy && labelledBy.trim()) {
+      const parts = labelledBy.trim().split(/\s+/).map((id) => doc.querySelector(`#${escapeSelectorAttr(id)}`)?.textContent?.trim() ?? "").filter((text) => text.length > 0);
+      if (parts.length > 0) {
+        return parts.join(" ");
+      }
+    }
+    if (input.id) {
+      const explicitLabel = doc.querySelector(`label[for="${escapeSelectorAttr(input.id)}"]`);
+      if (explicitLabel?.textContent?.trim()) {
+        return explicitLabel.textContent.trim();
+      }
+    }
+    const wrappingLabel = typeof input.closest === "function" ? input.closest("label") : null;
+    if (wrappingLabel?.textContent?.trim()) {
+      return wrappingLabel.textContent.trim();
+    }
+    const fieldWrapper = typeof input.closest === "function" ? input.closest('[data-automation-id^="formField-"]') : null;
+    if (fieldWrapper && typeof fieldWrapper.querySelectorAll === "function") {
+      const nestedInputs = fieldWrapper.querySelectorAll("input");
+      if (nestedInputs.length === 1) {
+        const formLabel = fieldWrapper.querySelector('[data-automation-id="formLabel"]') ?? fieldWrapper.querySelector("label");
+        if (formLabel?.textContent?.trim()) {
+          return formLabel.textContent.trim();
+        }
+      }
+    }
+    return "";
+  }
+  function isEligibleInputCandidate(doc, candidate, config) {
+    const input = candidate;
+    if (input.tagName && input.tagName.toUpperCase() !== "INPUT") {
+      return false;
+    }
+    const rawType = (input.getAttribute?.("type") ?? input.type ?? "text").toLowerCase();
+    if (DISALLOWED_INPUT_TYPES.has(rawType)) {
+      return false;
+    }
+    const allowedTypes = config.allowedInputTypes ?? DEFAULT_ALLOWED_INPUT_TYPES;
+    if (!allowedTypes.has(rawType)) {
+      return false;
+    }
+    if (input.disabled || input.readOnly || input.hidden || input.getAttribute?.("aria-hidden") === "true") {
+      return false;
+    }
+    const autocomplete = (input.getAttribute?.("autocomplete") ?? "").trim().toLowerCase();
+    if (autocomplete && config.disallowedAutocomplete.has(autocomplete)) {
+      return false;
+    }
+    const labelText = getAccessibleLabel(doc, input);
+    const metadataToInspect = [
+      input.id ?? "",
+      input.name ?? "",
+      input.getAttribute?.("data-automation-id") ?? "",
+      input.getAttribute?.("aria-label") ?? "",
+      labelText
+    ].join(" ");
+    if (config.negativePattern.test(metadataToInspect)) {
+      return false;
+    }
+    return true;
+  }
+  function collectTierMatches(doc, selectors, config) {
+    const unique = /* @__PURE__ */ new Set();
+    let matchedSelector = "";
+    for (const selector of selectors) {
+      for (const el of queryElements(doc, selector)) {
+        if (isEligibleInputCandidate(doc, el, config)) {
+          if (!matchedSelector) {
+            matchedSelector = selector;
+          }
+          unique.add(el);
+        }
+      }
+    }
+    return { elements: Array.from(unique), matchedSelector };
+  }
+  function findUniqueInputField(doc, config) {
+    const tier1 = collectTierMatches(doc, config.tier1Selectors, config);
+    if (tier1.elements.length === 1 && tier1.elements[0]) {
+      return { status: "found", element: tier1.elements[0], matchedBy: tier1.matchedSelector };
+    }
+    if (tier1.elements.length > 1) {
+      return {
+        status: "ambiguous",
+        reason: `Multiple ${config.fieldLabel} fields detected; unable to determine a unique target.`
+      };
+    }
+    const tier2 = collectTierMatches(doc, config.tier2Selectors, config);
+    if (tier2.elements.length === 1 && tier2.elements[0]) {
+      return { status: "found", element: tier2.elements[0], matchedBy: tier2.matchedSelector };
+    }
+    if (tier2.elements.length > 1) {
+      return {
+        status: "ambiguous",
+        reason: `Multiple ${config.fieldLabel} fields detected; unable to determine a unique target.`
+      };
+    }
+    const labelMatches = /* @__PURE__ */ new Set();
+    for (const el of queryElements(doc, "input")) {
+      if (!isEligibleInputCandidate(doc, el, config)) {
+        continue;
+      }
+      const normalizedLabel = normalizeLabelText(getAccessibleLabel(doc, el));
+      if (normalizedLabel && config.exactLabelPattern.test(normalizedLabel)) {
+        labelMatches.add(el);
+      }
+    }
+    const resolved = Array.from(labelMatches);
+    if (resolved.length === 1 && resolved[0]) {
+      return { status: "found", element: resolved[0], matchedBy: `label:${config.field}` };
+    }
+    if (resolved.length > 1) {
+      return {
+        status: "ambiguous",
+        reason: `Multiple ${config.fieldLabel} fields detected; unable to determine a unique target.`
+      };
+    }
+    return {
+      status: "not_found",
+      reason: `${config.fieldLabel} field could not be identified.`
+    };
+  }
+  function setInputValueAndDispatchEvents(input, value) {
+    if (typeof input.focus === "function") {
+      input.focus();
+    }
+    const prototypeSetter = typeof HTMLInputElement !== "undefined" && input instanceof HTMLInputElement ? Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set : void 0;
+    if (prototypeSetter) {
+      prototypeSetter.call(input, value);
+    } else {
+      input.value = value;
+    }
+    if (typeof input.dispatchEvent === "function" && typeof Event === "function") {
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+  }
+  function populateMatchedField(doc, rawValue, config, emptyStatus = "missing_value") {
+    const trimmedValue = rawValue.trim();
+    if (!trimmedValue) {
+      return {
+        ok: false,
+        status: emptyStatus,
+        field: config.field,
+        label: config.fieldLabel,
+        message: `${config.fieldLabel} is missing from your profile.`
+      };
+    }
+    const lookup = findUniqueInputField(doc, config);
+    if (lookup.status !== "found") {
+      return {
+        ok: false,
+        status: lookup.status === "ambiguous" ? "field_ambiguous" : "field_not_found",
+        field: config.field,
+        label: config.fieldLabel,
+        message: lookup.reason
+      };
+    }
+    const currentValue = (lookup.element.value ?? "").trim();
+    if (currentValue.length > 0) {
+      return {
+        ok: false,
+        status: "already_populated",
+        field: config.field,
+        label: config.fieldLabel,
+        message: "Field already contains a value.",
+        matchedBy: lookup.matchedBy
+      };
+    }
+    try {
+      setInputValueAndDispatchEvents(lookup.element, trimmedValue);
+      return {
+        ok: true,
+        status: "filled",
+        field: config.field,
+        label: config.fieldLabel,
+        message: `${config.fieldLabel} filled successfully.`,
+        matchedBy: lookup.matchedBy
+      };
+    } catch {
+      return {
+        ok: false,
+        status: "failed",
+        field: config.field,
+        label: config.fieldLabel,
+        message: "Autofill failed."
+      };
+    }
+  }
+
   // src/adapters/workdayAdapter.ts
   var WORKDAY_JOBS_HOST_PATTERN = /^(?:[a-z0-9-]+\.)*myworkdayjobs\.com$/i;
   var WORKDAY_PORTAL_HOST_PATTERN = /^(?:[a-z0-9-]+\.)*myworkday\.com$/i;
@@ -389,266 +611,216 @@
     autofillFirstName(doc, url, firstName) {
       return autofillWorkdayFirstName(doc, url, firstName, this);
     }
+    autofillLastName(doc, url, lastName) {
+      return autofillWorkdayLastName(doc, url, lastName, this);
+    }
+    autofillEmail(doc, url, email) {
+      return autofillWorkdayEmail(doc, url, email, this);
+    }
+    autofillBasicFields(doc, url, values) {
+      return autofillWorkdayFields(doc, url, values, this);
+    }
   };
-  var DISALLOWED_INPUT_TYPES = /* @__PURE__ */ new Set([
-    "hidden",
-    "checkbox",
-    "radio",
-    "file",
-    "submit",
-    "button",
-    "reset",
-    "image"
-  ]);
-  var DISALLOWED_AUTOCOMPLETE_VALUES = /* @__PURE__ */ new Set([
-    "family-name",
-    "additional-name",
-    "name",
-    "email",
-    "tel",
-    "organization",
-    "street-address",
-    "postal-code",
-    "username",
-    "new-password",
-    "current-password"
-  ]);
-  var NEGATIVE_FIELD_PATTERN = /\b(?:last|middle|family|surname|full\s*name|fullname|preferred|emergency|reference|referral|manager|supervisor|email|phone|mobile|address|street|city|state|postal|zip|country)\b|(?:last|middle|family|surname|preferred)name/i;
-  var EXACT_FIRST_NAME_LABEL_PATTERN = /^(?:legal\s+)?(?:first|given)\s*name$/i;
-  var TIER1_FIRST_NAME_SELECTORS = [
-    'input[data-automation-id="legalNameSection_firstName"]',
-    '[data-automation-id="legalNameSection_firstName"] input',
-    '[data-automation-id="formField-legalNameSection_firstName"] input',
-    'input[name="legalName--firstName"]',
-    'input[id="legalName--firstName"]',
-    'input[id="name--legalName--firstName"]'
-  ];
-  var TIER2_FIRST_NAME_SELECTORS = [
-    'input[data-automation-id="firstName"]',
-    '[data-automation-id="formField-firstName"] input',
-    'input[autocomplete="given-name"]',
-    'input[name="firstName"]',
-    'input[id="firstName"]',
-    'input[name="first_name"]',
-    'input[id="first_name"]',
-    'input[name="first-name"]',
-    'input[id="first-name"]'
-  ];
-  function escapeSelectorAttr(value) {
-    return value.replace(/["\\]/g, "\\$&");
-  }
-  function normalizeLabelText(raw) {
-    return raw.replace(/\*/g, " ").replace(/\(required\)|\brequired\b/gi, " ").replace(/\s+/g, " ").trim().toLowerCase();
-  }
-  function queryElements(root, selector) {
-    if (typeof root.querySelectorAll === "function") {
-      return Array.from(root.querySelectorAll(selector));
-    }
-    const single = root.querySelector(selector);
-    return single ? [single] : [];
-  }
-  function getAccessibleLabel(doc, input) {
-    const ariaLabel = input.getAttribute?.("aria-label");
-    if (ariaLabel && ariaLabel.trim()) {
-      return ariaLabel.trim();
-    }
-    const labelledBy = input.getAttribute?.("aria-labelledby");
-    if (labelledBy && labelledBy.trim()) {
-      const parts = labelledBy.trim().split(/\s+/).map((id) => doc.querySelector(`#${escapeSelectorAttr(id)}`)?.textContent?.trim() ?? "").filter((text) => text.length > 0);
-      if (parts.length > 0) {
-        return parts.join(" ");
-      }
-    }
-    if (input.id) {
-      const explicitLabel = doc.querySelector(`label[for="${escapeSelectorAttr(input.id)}"]`);
-      if (explicitLabel?.textContent?.trim()) {
-        return explicitLabel.textContent.trim();
-      }
-    }
-    const wrappingLabel = typeof input.closest === "function" ? input.closest("label") : null;
-    if (wrappingLabel?.textContent?.trim()) {
-      return wrappingLabel.textContent.trim();
-    }
-    const fieldWrapper = typeof input.closest === "function" ? input.closest('[data-automation-id^="formField-"]') : null;
-    if (fieldWrapper && typeof fieldWrapper.querySelectorAll === "function") {
-      const nestedInputs = fieldWrapper.querySelectorAll("input");
-      if (nestedInputs.length === 1) {
-        const formLabel = fieldWrapper.querySelector('[data-automation-id="formLabel"]') ?? fieldWrapper.querySelector("label");
-        if (formLabel?.textContent?.trim()) {
-          return formLabel.textContent.trim();
-        }
-      }
-    }
-    return "";
-  }
-  function isEligibleFirstNameInput(doc, candidate) {
-    const input = candidate;
-    if (input.tagName && input.tagName.toUpperCase() !== "INPUT") {
-      return false;
-    }
-    const rawType = (input.getAttribute?.("type") ?? input.type ?? "text").toLowerCase();
-    if (DISALLOWED_INPUT_TYPES.has(rawType)) {
-      return false;
-    }
-    if (input.disabled || input.readOnly || input.hidden || input.getAttribute?.("aria-hidden") === "true") {
-      return false;
-    }
-    const autocomplete = (input.getAttribute?.("autocomplete") ?? "").trim().toLowerCase();
-    if (autocomplete && DISALLOWED_AUTOCOMPLETE_VALUES.has(autocomplete)) {
-      return false;
-    }
-    const labelText = getAccessibleLabel(doc, input);
-    const metadataToInspect = [
-      input.id ?? "",
-      input.name ?? "",
-      input.getAttribute?.("data-automation-id") ?? "",
-      input.getAttribute?.("aria-label") ?? "",
-      labelText
-    ].join(" ");
-    if (NEGATIVE_FIELD_PATTERN.test(metadataToInspect)) {
-      return false;
-    }
-    return true;
-  }
-  function collectTierMatches(doc, selectors) {
-    const unique = /* @__PURE__ */ new Set();
-    let matchedSelector = "";
-    for (const selector of selectors) {
-      for (const el of queryElements(doc, selector)) {
-        if (isEligibleFirstNameInput(doc, el)) {
-          if (!matchedSelector) {
-            matchedSelector = selector;
-          }
-          unique.add(el);
-        }
-      }
-    }
-    return { elements: Array.from(unique), matchedSelector };
-  }
-  function findWorkdayFirstNameField(doc) {
-    const tier1 = collectTierMatches(doc, TIER1_FIRST_NAME_SELECTORS);
-    if (tier1.elements.length === 1 && tier1.elements[0]) {
-      return { status: "found", element: tier1.elements[0], matchedBy: tier1.matchedSelector };
-    }
-    if (tier1.elements.length > 1) {
-      return {
-        status: "ambiguous",
-        reason: "Multiple First Name fields detected; unable to determine a unique target."
-      };
-    }
-    const tier2 = collectTierMatches(doc, TIER2_FIRST_NAME_SELECTORS);
-    if (tier2.elements.length === 1 && tier2.elements[0]) {
-      return { status: "found", element: tier2.elements[0], matchedBy: tier2.matchedSelector };
-    }
-    if (tier2.elements.length > 1) {
-      return {
-        status: "ambiguous",
-        reason: "Multiple First Name fields detected; unable to determine a unique target."
-      };
-    }
-    const labelMatches = /* @__PURE__ */ new Set();
-    for (const el of queryElements(doc, "input")) {
-      if (!isEligibleFirstNameInput(doc, el)) {
-        continue;
-      }
-      const normalizedLabel = normalizeLabelText(getAccessibleLabel(doc, el));
-      if (normalizedLabel && EXACT_FIRST_NAME_LABEL_PATTERN.test(normalizedLabel)) {
-        labelMatches.add(el);
-      }
-    }
-    const resolved = Array.from(labelMatches);
-    if (resolved.length === 1 && resolved[0]) {
-      return { status: "found", element: resolved[0], matchedBy: "label:first-name" };
-    }
-    if (resolved.length > 1) {
-      return {
-        status: "ambiguous",
-        reason: "Multiple First Name fields detected; unable to determine a unique target."
-      };
-    }
-    return {
-      status: "not_found",
-      reason: "First Name field could not be identified."
-    };
-  }
-  function setInputValueAndDispatchEvents(input, value) {
-    if (typeof input.focus === "function") {
-      input.focus();
-    }
-    const prototypeSetter = typeof HTMLInputElement !== "undefined" && input instanceof HTMLInputElement ? Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set : void 0;
-    if (prototypeSetter) {
-      prototypeSetter.call(input, value);
-    } else {
-      input.value = value;
-    }
-    if (typeof input.dispatchEvent === "function" && typeof Event === "function") {
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-      input.dispatchEvent(new Event("change", { bubbles: true }));
-    }
-  }
-  function autofillWorkdayFirstName(doc, url, firstName, adapter = new WorkdayAdapter()) {
+  var WORKDAY_FIRST_NAME_CONFIG = {
+    field: "firstName",
+    fieldLabel: "First Name",
+    tier1Selectors: [
+      'input[data-automation-id="legalNameSection_firstName"]',
+      '[data-automation-id="legalNameSection_firstName"] input',
+      '[data-automation-id="formField-legalNameSection_firstName"] input',
+      'input[name="legalName--firstName"]',
+      'input[id="legalName--firstName"]',
+      'input[id="name--legalName--firstName"]'
+    ],
+    tier2Selectors: [
+      'input[data-automation-id="firstName"]',
+      '[data-automation-id="formField-firstName"] input',
+      'input[autocomplete="given-name"]',
+      'input[name="firstName"]',
+      'input[id="firstName"]',
+      'input[name="first_name"]',
+      'input[id="first_name"]',
+      'input[name="first-name"]',
+      'input[id="first-name"]'
+    ],
+    exactLabelPattern: /^(?:legal\s+)?(?:first|given)\s*name$/i,
+    negativePattern: /\b(?:last|middle|family|surname|full\s*name|fullname|preferred|emergency|reference|referral|manager|supervisor|email|phone|mobile|address|street|city|state|postal|zip|country)\b|(?:last|middle|family|surname|preferred)name/i,
+    disallowedAutocomplete: /* @__PURE__ */ new Set([
+      "family-name",
+      "additional-name",
+      "name",
+      "email",
+      "tel",
+      "organization",
+      "street-address",
+      "postal-code",
+      "username",
+      "new-password",
+      "current-password"
+    ])
+  };
+  var WORKDAY_LAST_NAME_CONFIG = {
+    field: "lastName",
+    fieldLabel: "Last Name",
+    tier1Selectors: [
+      'input[data-automation-id="legalNameSection_lastName"]',
+      '[data-automation-id="legalNameSection_lastName"] input',
+      '[data-automation-id="formField-legalNameSection_lastName"] input',
+      'input[name="legalName--lastName"]',
+      'input[id="legalName--lastName"]',
+      'input[id="name--legalName--lastName"]'
+    ],
+    tier2Selectors: [
+      'input[data-automation-id="lastName"]',
+      '[data-automation-id="formField-lastName"] input',
+      'input[autocomplete="family-name"]',
+      'input[name="lastName"]',
+      'input[id="lastName"]',
+      'input[name="last_name"]',
+      'input[id="last_name"]',
+      'input[name="last-name"]',
+      'input[id="last-name"]',
+      'input[name="surname"]',
+      'input[id="surname"]'
+    ],
+    exactLabelPattern: /^(?:legal\s+)?(?:last|family)\s*name$|^surname$/i,
+    negativePattern: /\b(?:first|middle|given|full\s*name|fullname|preferred|emergency|reference|referral|manager|supervisor|guardian|spouse|email|phone|mobile|address|street|city|state|postal|zip|country)\b|(?:first|middle|given|preferred)name/i,
+    disallowedAutocomplete: /* @__PURE__ */ new Set([
+      "given-name",
+      "additional-name",
+      "name",
+      "email",
+      "tel",
+      "organization",
+      "street-address",
+      "postal-code",
+      "username",
+      "new-password",
+      "current-password"
+    ])
+  };
+  var WORKDAY_EMAIL_CONFIG = {
+    field: "email",
+    fieldLabel: "Email",
+    tier1Selectors: [
+      'input[data-automation-id="email"]',
+      '[data-automation-id="email"] input',
+      '[data-automation-id="formField-email"] input',
+      'input[data-automation-id="contactInformation_email"]',
+      '[data-automation-id="contactInformation_email"] input',
+      'input[name="email"]',
+      'input[id="email"]',
+      'input[name="emailAddress"]',
+      'input[id="emailAddress"]',
+      'input[name="primaryEmail"]',
+      'input[id="primaryEmail"]'
+    ],
+    tier2Selectors: [
+      'input[autocomplete="email"]',
+      'input[type="email"]',
+      'input[name="email_address"]',
+      'input[id="email_address"]',
+      'input[name="email-address"]',
+      'input[id="email-address"]'
+    ],
+    exactLabelPattern: /^(?:primary\s+)?e-?mail(?:\s+address)?$/i,
+    negativePattern: /\b(?:secondary|alternate|alternative|other|backup|confirm|verify|reenter|re-enter|retype|emergency|reference|referral|manager|supervisor|recruiter|guardian|spouse|work\s*email|company\s*email|password|username|phone|mobile|first|last|middle|street\s*address|mailing\s*address|home\s*address|postal\s*address)\b|(?:secondary|alternate|alternative|backup|confirm|emergency|reference|referral|work|company|contact)email/i,
+    allowedInputTypes: /* @__PURE__ */ new Set(["", "text", "email"]),
+    disallowedAutocomplete: /* @__PURE__ */ new Set([
+      "given-name",
+      "family-name",
+      "additional-name",
+      "name",
+      "tel",
+      "organization",
+      "street-address",
+      "postal-code",
+      "username",
+      "new-password",
+      "current-password"
+    ])
+  };
+  function isWorkdayApplicationPage(doc, url, adapter) {
     if (!adapter.isSupportedUrl(url)) {
-      return {
-        ok: false,
-        status: "unsupported_page",
-        field: "firstName",
-        message: "Autofill is only supported on Workday application pages."
-      };
+      return false;
     }
     const detection = adapter.detectFromDocument(doc, url);
-    if (detection.platformId !== "workday" || !detection.isSupported || !detection.isApplicationPage) {
+    return detection.platformId === "workday" && detection.isSupported && detection.isApplicationPage;
+  }
+  function autofillWorkdayFirstName(doc, url, firstName, adapter = new WorkdayAdapter()) {
+    if (!isWorkdayApplicationPage(doc, url, adapter)) {
       return {
         ok: false,
         status: "unsupported_page",
         field: "firstName",
+        label: "First Name",
         message: "Autofill is only supported on Workday application pages."
       };
     }
-    const trimmedFirstName = firstName.trim();
-    if (!trimmedFirstName) {
+    return populateMatchedField(doc, firstName, WORKDAY_FIRST_NAME_CONFIG, "missing_first_name");
+  }
+  function autofillWorkdayLastName(doc, url, lastName, adapter = new WorkdayAdapter()) {
+    if (!isWorkdayApplicationPage(doc, url, adapter)) {
       return {
         ok: false,
-        status: "missing_first_name",
-        field: "firstName",
-        message: "First Name is missing from your profile."
+        status: "unsupported_page",
+        field: "lastName",
+        label: "Last Name",
+        message: "Autofill is only supported on Workday application pages."
       };
     }
-    const lookup = findWorkdayFirstNameField(doc);
-    if (lookup.status !== "found") {
+    return populateMatchedField(doc, lastName, WORKDAY_LAST_NAME_CONFIG, "missing_value");
+  }
+  function autofillWorkdayEmail(doc, url, email, adapter = new WorkdayAdapter()) {
+    if (!isWorkdayApplicationPage(doc, url, adapter)) {
       return {
         ok: false,
-        status: lookup.status === "ambiguous" ? "field_ambiguous" : "field_not_found",
-        field: "firstName",
-        message: lookup.reason
+        status: "unsupported_page",
+        field: "email",
+        label: "Email",
+        message: "Autofill is only supported on Workday application pages."
       };
     }
-    const currentValue = (lookup.element.value ?? "").trim();
-    if (currentValue.length > 0) {
+    return populateMatchedField(doc, email, WORKDAY_EMAIL_CONFIG, "missing_value");
+  }
+  function autofillWorkdayFields(doc, url, values, adapter = new WorkdayAdapter()) {
+    if (!isWorkdayApplicationPage(doc, url, adapter)) {
       return {
         ok: false,
-        status: "already_populated",
-        field: "firstName",
-        message: "Field already contains a value.",
-        matchedBy: lookup.matchedBy
+        results: [
+          {
+            ok: false,
+            status: "unsupported_page",
+            field: "firstName",
+            label: "First Name",
+            message: "Unsupported page."
+          },
+          {
+            ok: false,
+            status: "unsupported_page",
+            field: "lastName",
+            label: "Last Name",
+            message: "Unsupported page."
+          },
+          {
+            ok: false,
+            status: "unsupported_page",
+            field: "email",
+            label: "Email",
+            message: "Unsupported page."
+          }
+        ]
       };
     }
-    try {
-      setInputValueAndDispatchEvents(lookup.element, trimmedFirstName);
-      return {
-        ok: true,
-        status: "filled",
-        field: "firstName",
-        message: "First Name filled successfully.",
-        matchedBy: lookup.matchedBy
-      };
-    } catch {
-      return {
-        ok: false,
-        status: "failed",
-        field: "firstName",
-        message: "Autofill failed."
-      };
-    }
+    const results = [
+      populateMatchedField(doc, values.firstName, WORKDAY_FIRST_NAME_CONFIG, "missing_first_name"),
+      populateMatchedField(doc, values.lastName, WORKDAY_LAST_NAME_CONFIG, "missing_value"),
+      populateMatchedField(doc, values.email, WORKDAY_EMAIL_CONFIG, "missing_value")
+    ];
+    return {
+      ok: results.some((item) => item.ok),
+      results
+    };
   }
 
   // src/adapters/registry.ts
@@ -754,6 +926,15 @@
           message.firstName
         );
         sendResponse({ ok: true, result });
+        return false;
+      }
+      if (message.type === "EXECUTE_WORKDAY_FIELDS_AUTOFILL") {
+        const batch = autofillWorkdayFields(
+          document,
+          window.location.href,
+          message.values
+        );
+        sendResponse({ ok: true, batch });
         return false;
       }
       return false;

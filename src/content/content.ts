@@ -1,5 +1,8 @@
 import { detectPlatformInDocument } from '../adapters/registry';
-import { autofillWorkdayFirstName } from '../adapters/workdayAdapter';
+import {
+  autofillWorkdayFields,
+  autofillWorkdayFirstName,
+} from '../adapters/workdayAdapter';
 import type {
   ExtensionMessage,
   ExtensionMessageResponse,
@@ -95,6 +98,16 @@ chrome.runtime.onMessage.addListener(
         message.firstName,
       );
       sendResponse({ ok: true, result });
+      return false;
+    }
+
+    if (message.type === 'EXECUTE_WORKDAY_FIELDS_AUTOFILL') {
+      const batch = autofillWorkdayFields(
+        document,
+        window.location.href,
+        message.values,
+      );
+      sendResponse({ ok: true, batch });
       return false;
     }
 

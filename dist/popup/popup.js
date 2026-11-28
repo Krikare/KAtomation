@@ -38,6 +38,11 @@
 
   // src/popup/popup.ts
   var latestDetection = INITIAL_DETECTION_STATE;
+  var FIELD_LABELS = {
+    firstName: "First Name",
+    lastName: "Last Name",
+    email: "Email"
+  };
   function formatPageLabel(pageType, isApplicationPage) {
     if (isApplicationPage || pageType === "application") {
       return "Job Application";
@@ -61,38 +66,72 @@
     }
     const eligible = isWorkdayApplicationEligible(detection);
     autofillBtn.disabled = isBusy || !eligible;
-    autofillBtn.textContent = isBusy ? "Filling First Name..." : "Auto-fill";
+    autofillBtn.textContent = isBusy ? "Filling Fields..." : "Auto-fill";
     if (noteEl) {
       if (eligible) {
-        noteEl.textContent = "Ready to fill First Name from your saved profile.";
+        noteEl.textContent = "Ready to fill First Name, Last Name, and Email from your profile.";
       } else if (detection.platformId === "workday" && detection.isSupported) {
-        noteEl.textContent = "Open a Workday application form to enable First Name auto-fill.";
+        noteEl.textContent = "Open a Workday application form to enable auto-fill.";
       } else if (detection.platformId === "greenhouse" && detection.isSupported) {
         noteEl.textContent = "Greenhouse auto-fill will be enabled in a future milestone.";
       } else {
-        noteEl.textContent = "Auto-fill is enabled on Workday application pages (First Name only).";
+        noteEl.textContent = "Auto-fill is enabled on Workday application pages (First Name, Last Name, Email).";
       }
     }
   }
-  function renderAutofillFeedback(result) {
+  function formatResultStatusText(result) {
+    switch (result.status) {
+      case "filled":
+        return "Filled successfully.";
+      case "already_populated":
+        return "Already populated.";
+      case "missing_profile":
+      case "missing_first_name":
+      case "missing_value":
+        return "Missing from profile.";
+      case "field_not_found":
+        return "Field not found.";
+      case "field_ambiguous":
+        return "Field ambiguous.";
+      case "unsupported_page":
+        return "Unsupported page.";
+      case "storage_error":
+        return "Storage error.";
+      default:
+        return result.message || "Autofill failed.";
+    }
+  }
+  function getFeedbackToneClass(result) {
+    if (result.ok && result.status === "filled") {
+      return "autofill-feedback--success";
+    }
+    if (result.status === "already_populated" || result.status === "missing_profile" || result.status === "missing_first_name" || result.status === "missing_value" || result.status === "field_not_found" || result.status === "field_ambiguous") {
+      return "autofill-feedback--warning";
+    }
+    return "autofill-feedback--error";
+  }
+  function renderAutofillFeedbackList(results) {
     const feedbackEl = document.getElementById("autofill-feedback");
     if (!feedbackEl) {
       return;
     }
-    if (!result) {
+    feedbackEl.replaceChildren();
+    if (!results || results.length === 0) {
       feedbackEl.hidden = true;
-      feedbackEl.textContent = "";
-      feedbackEl.className = "autofill-feedback";
       return;
     }
     feedbackEl.hidden = false;
-    feedbackEl.textContent = result.message;
-    if (result.ok && result.status === "filled") {
-      feedbackEl.className = "autofill-feedback autofill-feedback--success";
-    } else if (result.status === "already_populated" || result.status === "missing_profile" || result.status === "missing_first_name" || result.status === "field_not_found" || result.status === "field_ambiguous") {
-      feedbackEl.className = "autofill-feedback autofill-feedback--warning";
-    } else {
-      feedbackEl.className = "autofill-feedback autofill-feedback--error";
+    for (const result of results) {
+      const row = document.createElement("div");
+      row.className = `autofill-feedback ${getFeedbackToneClass(result)}`;
+      const labelEl = document.createElement("span");
+      labelEl.className = "autofill-feedback-label";
+      labelEl.textContent = `${result.label ?? FIELD_LABELS[result.field]}:`;
+      const statusEl = document.createElement("span");
+      statusEl.className = "autofill-feedback-status";
+      statusEl.textContent = formatResultStatusText(result);
+      row.append(labelEl, statusEl);
+      feedbackEl.appendChild(row);
     }
   }
   function renderDetectionState(detection) {
@@ -144,36 +183,34 @@
     if (!isWorkdayApplicationEligible(latestDetection)) {
       return;
     }
-    renderAutofillFeedback(null);
+    renderAutofillFeedbackList(null);
     updateAutofillButtonState(latestDetection, true);
     try {
       const response = await chrome.runtime.sendMessage({
-        type: "AUTOFILL_WORKDAY_FIRST_NAME"
+        type: "AUTOFILL_WORKDAY_FIELDS"
       });
-      if (response?.ok && "result" in response) {
-        renderAutofillFeedback(response.result);
+      if (response?.ok && "batch" in response) {
+        renderAutofillFeedbackList(response.batch.results);
       } else {
-        renderAutofillFeedback({
-          ok: false,
-          status: "failed",
-          field: "firstName",
-          message: "Autofill failed."
-        });
+        renderAutofillFeedbackList([
+          { ok: false, status: "failed", field: "firstName", label: "First Name", message: "Autofill failed." },
+          { ok: false, status: "failed", field: "lastName", label: "Last Name", message: "Autofill failed." },
+          { ok: false, status: "failed", field: "email", label: "Email", message: "Autofill failed." }
+        ]);
       }
     } catch {
-      renderAutofillFeedback({
-        ok: false,
-        status: "failed",
-        field: "firstName",
-        message: "Autofill failed."
-      });
+      renderAutofillFeedbackList([
+        { ok: false, status: "failed", field: "firstName", label: "First Name", message: "Autofill failed." },
+        { ok: false, status: "failed", field: "lastName", label: "Last Name", message: "Autofill failed." },
+        { ok: false, status: "failed", field: "email", label: "Email", message: "Autofill failed." }
+      ]);
     } finally {
       updateAutofillButtonState(latestDetection, false);
     }
   }
   function initPopup() {
     renderDetectionState(INITIAL_DETECTION_STATE);
-    renderAutofillFeedback(null);
+    renderAutofillFeedbackList(null);
     const autofillButton = document.getElementById("autofill-btn");
     autofillButton?.addEventListener("click", () => {
       void handleAutofillClick();

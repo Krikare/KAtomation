@@ -1,4 +1,15 @@
-import type { AutofillFieldResult, PlatformDetectionResult } from '../shared/types';
+import type {
+  AutofillFieldResult,
+  PlatformDetectionResult,
+  WorkdayAutofillBatchResult,
+  WorkdayBasicProfileValues,
+} from '../shared/types';
+import {
+  type FieldLookupResult,
+  type FieldMatcherConfig,
+  findUniqueInputField,
+  populateMatchedField,
+} from './autofillUtils';
 import type { ATSAdapter } from './baseAdapter';
 
 const WORKDAY_JOBS_HOST_PATTERN = /^(?:[a-z0-9-]+\.)*myworkdayjobs\.com$/i;
@@ -199,266 +210,177 @@ export class WorkdayAdapter implements ATSAdapter {
   autofillFirstName(doc: Document, url: string, firstName: string): AutofillFieldResult {
     return autofillWorkdayFirstName(doc, url, firstName, this);
   }
+
+  autofillLastName(doc: Document, url: string, lastName: string): AutofillFieldResult {
+    return autofillWorkdayLastName(doc, url, lastName, this);
+  }
+
+  autofillEmail(doc: Document, url: string, email: string): AutofillFieldResult {
+    return autofillWorkdayEmail(doc, url, email, this);
+  }
+
+  autofillBasicFields(
+    doc: Document,
+    url: string,
+    values: WorkdayBasicProfileValues,
+  ): WorkdayAutofillBatchResult {
+    return autofillWorkdayFields(doc, url, values, this);
+  }
 }
 
-export type WorkdayFieldLookupResult =
-  | { status: 'found'; element: HTMLInputElement; matchedBy: string }
-  | { status: 'ambiguous' | 'not_found'; reason: string };
+export type WorkdayFieldLookupResult = FieldLookupResult;
 
-const DISALLOWED_INPUT_TYPES = new Set([
-  'hidden',
-  'checkbox',
-  'radio',
-  'file',
-  'submit',
-  'button',
-  'reset',
-  'image',
-]);
+const WORKDAY_FIRST_NAME_CONFIG: FieldMatcherConfig = {
+  field: 'firstName',
+  fieldLabel: 'First Name',
+  tier1Selectors: [
+    'input[data-automation-id="legalNameSection_firstName"]',
+    '[data-automation-id="legalNameSection_firstName"] input',
+    '[data-automation-id="formField-legalNameSection_firstName"] input',
+    'input[name="legalName--firstName"]',
+    'input[id="legalName--firstName"]',
+    'input[id="name--legalName--firstName"]',
+  ],
+  tier2Selectors: [
+    'input[data-automation-id="firstName"]',
+    '[data-automation-id="formField-firstName"] input',
+    'input[autocomplete="given-name"]',
+    'input[name="firstName"]',
+    'input[id="firstName"]',
+    'input[name="first_name"]',
+    'input[id="first_name"]',
+    'input[name="first-name"]',
+    'input[id="first-name"]',
+  ],
+  exactLabelPattern: /^(?:legal\s+)?(?:first|given)\s*name$/i,
+  negativePattern:
+    /\b(?:last|middle|family|surname|full\s*name|fullname|preferred|emergency|reference|referral|manager|supervisor|email|phone|mobile|address|street|city|state|postal|zip|country)\b|(?:last|middle|family|surname|preferred)name/i,
+  disallowedAutocomplete: new Set([
+    'family-name',
+    'additional-name',
+    'name',
+    'email',
+    'tel',
+    'organization',
+    'street-address',
+    'postal-code',
+    'username',
+    'new-password',
+    'current-password',
+  ]),
+};
 
-const DISALLOWED_AUTOCOMPLETE_VALUES = new Set([
-  'family-name',
-  'additional-name',
-  'name',
-  'email',
-  'tel',
-  'organization',
-  'street-address',
-  'postal-code',
-  'username',
-  'new-password',
-  'current-password',
-]);
+const WORKDAY_LAST_NAME_CONFIG: FieldMatcherConfig = {
+  field: 'lastName',
+  fieldLabel: 'Last Name',
+  tier1Selectors: [
+    'input[data-automation-id="legalNameSection_lastName"]',
+    '[data-automation-id="legalNameSection_lastName"] input',
+    '[data-automation-id="formField-legalNameSection_lastName"] input',
+    'input[name="legalName--lastName"]',
+    'input[id="legalName--lastName"]',
+    'input[id="name--legalName--lastName"]',
+  ],
+  tier2Selectors: [
+    'input[data-automation-id="lastName"]',
+    '[data-automation-id="formField-lastName"] input',
+    'input[autocomplete="family-name"]',
+    'input[name="lastName"]',
+    'input[id="lastName"]',
+    'input[name="last_name"]',
+    'input[id="last_name"]',
+    'input[name="last-name"]',
+    'input[id="last-name"]',
+    'input[name="surname"]',
+    'input[id="surname"]',
+  ],
+  exactLabelPattern: /^(?:legal\s+)?(?:last|family)\s*name$|^surname$/i,
+  negativePattern:
+    /\b(?:first|middle|given|full\s*name|fullname|preferred|emergency|reference|referral|manager|supervisor|guardian|spouse|email|phone|mobile|address|street|city|state|postal|zip|country)\b|(?:first|middle|given|preferred)name/i,
+  disallowedAutocomplete: new Set([
+    'given-name',
+    'additional-name',
+    'name',
+    'email',
+    'tel',
+    'organization',
+    'street-address',
+    'postal-code',
+    'username',
+    'new-password',
+    'current-password',
+  ]),
+};
 
-const NEGATIVE_FIELD_PATTERN =
-  /\b(?:last|middle|family|surname|full\s*name|fullname|preferred|emergency|reference|referral|manager|supervisor|email|phone|mobile|address|street|city|state|postal|zip|country)\b|(?:last|middle|family|surname|preferred)name/i;
+const WORKDAY_EMAIL_CONFIG: FieldMatcherConfig = {
+  field: 'email',
+  fieldLabel: 'Email',
+  tier1Selectors: [
+    'input[data-automation-id="email"]',
+    '[data-automation-id="email"] input',
+    '[data-automation-id="formField-email"] input',
+    'input[data-automation-id="contactInformation_email"]',
+    '[data-automation-id="contactInformation_email"] input',
+    'input[name="email"]',
+    'input[id="email"]',
+    'input[name="emailAddress"]',
+    'input[id="emailAddress"]',
+    'input[name="primaryEmail"]',
+    'input[id="primaryEmail"]',
+  ],
+  tier2Selectors: [
+    'input[autocomplete="email"]',
+    'input[type="email"]',
+    'input[name="email_address"]',
+    'input[id="email_address"]',
+    'input[name="email-address"]',
+    'input[id="email-address"]',
+  ],
+  exactLabelPattern: /^(?:primary\s+)?e-?mail(?:\s+address)?$/i,
+  negativePattern:
+    /\b(?:secondary|alternate|alternative|other|backup|confirm|verify|reenter|re-enter|retype|emergency|reference|referral|manager|supervisor|recruiter|guardian|spouse|work\s*email|company\s*email|password|username|phone|mobile|first|last|middle|street\s*address|mailing\s*address|home\s*address|postal\s*address)\b|(?:secondary|alternate|alternative|backup|confirm|emergency|reference|referral|work|company|contact)email/i,
+  allowedInputTypes: new Set(['', 'text', 'email']),
+  disallowedAutocomplete: new Set([
+    'given-name',
+    'family-name',
+    'additional-name',
+    'name',
+    'tel',
+    'organization',
+    'street-address',
+    'postal-code',
+    'username',
+    'new-password',
+    'current-password',
+  ]),
+};
 
-const EXACT_FIRST_NAME_LABEL_PATTERN = /^(?:legal\s+)?(?:first|given)\s*name$/i;
-
-const TIER1_FIRST_NAME_SELECTORS = [
-  'input[data-automation-id="legalNameSection_firstName"]',
-  '[data-automation-id="legalNameSection_firstName"] input',
-  '[data-automation-id="formField-legalNameSection_firstName"] input',
-  'input[name="legalName--firstName"]',
-  'input[id="legalName--firstName"]',
-  'input[id="name--legalName--firstName"]',
-] as const;
-
-const TIER2_FIRST_NAME_SELECTORS = [
-  'input[data-automation-id="firstName"]',
-  '[data-automation-id="formField-firstName"] input',
-  'input[autocomplete="given-name"]',
-  'input[name="firstName"]',
-  'input[id="firstName"]',
-  'input[name="first_name"]',
-  'input[id="first_name"]',
-  'input[name="first-name"]',
-  'input[id="first-name"]',
-] as const;
-
-function escapeSelectorAttr(value: string): string {
-  return value.replace(/["\\]/g, '\\$&');
-}
-
-function normalizeLabelText(raw: string): string {
-  return raw
-    .replace(/\*/g, ' ')
-    .replace(/\(required\)|\brequired\b/gi, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toLowerCase();
-}
-
-function queryElements(root: Document, selector: string): Element[] {
-  if (typeof root.querySelectorAll === 'function') {
-    return Array.from(root.querySelectorAll(selector));
-  }
-  const single = root.querySelector(selector);
-  return single ? [single] : [];
-}
-
-function getAccessibleLabel(doc: Document, input: HTMLInputElement): string {
-  const ariaLabel = input.getAttribute?.('aria-label');
-  if (ariaLabel && ariaLabel.trim()) {
-    return ariaLabel.trim();
-  }
-
-  const labelledBy = input.getAttribute?.('aria-labelledby');
-  if (labelledBy && labelledBy.trim()) {
-    const parts = labelledBy
-      .trim()
-      .split(/\s+/)
-      .map((id) => doc.querySelector(`#${escapeSelectorAttr(id)}`)?.textContent?.trim() ?? '')
-      .filter((text) => text.length > 0);
-    if (parts.length > 0) {
-      return parts.join(' ');
-    }
-  }
-
-  if (input.id) {
-    const explicitLabel = doc.querySelector(`label[for="${escapeSelectorAttr(input.id)}"]`);
-    if (explicitLabel?.textContent?.trim()) {
-      return explicitLabel.textContent.trim();
-    }
-  }
-
-  const wrappingLabel = typeof input.closest === 'function' ? input.closest('label') : null;
-  if (wrappingLabel?.textContent?.trim()) {
-    return wrappingLabel.textContent.trim();
-  }
-
-  const fieldWrapper =
-    typeof input.closest === 'function'
-      ? input.closest('[data-automation-id^="formField-"]')
-      : null;
-  if (fieldWrapper && typeof fieldWrapper.querySelectorAll === 'function') {
-    const nestedInputs = fieldWrapper.querySelectorAll('input');
-    if (nestedInputs.length === 1) {
-      const formLabel =
-        fieldWrapper.querySelector('[data-automation-id="formLabel"]') ??
-        fieldWrapper.querySelector('label');
-      if (formLabel?.textContent?.trim()) {
-        return formLabel.textContent.trim();
-      }
-    }
-  }
-
-  return '';
-}
-
-function isEligibleFirstNameInput(doc: Document, candidate: Element): candidate is HTMLInputElement {
-  const input = candidate as HTMLInputElement;
-  if (input.tagName && input.tagName.toUpperCase() !== 'INPUT') {
-    return false;
-  }
-
-  const rawType = (input.getAttribute?.('type') ?? input.type ?? 'text').toLowerCase();
-  if (DISALLOWED_INPUT_TYPES.has(rawType)) {
-    return false;
-  }
-
-  if (
-    input.disabled ||
-    input.readOnly ||
-    input.hidden ||
-    input.getAttribute?.('aria-hidden') === 'true'
-  ) {
-    return false;
-  }
-
-  const autocomplete = (input.getAttribute?.('autocomplete') ?? '').trim().toLowerCase();
-  if (autocomplete && DISALLOWED_AUTOCOMPLETE_VALUES.has(autocomplete)) {
-    return false;
-  }
-
-  const labelText = getAccessibleLabel(doc, input);
-  const metadataToInspect = [
-    input.id ?? '',
-    input.name ?? '',
-    input.getAttribute?.('data-automation-id') ?? '',
-    input.getAttribute?.('aria-label') ?? '',
-    labelText,
-  ].join(' ');
-
-  if (NEGATIVE_FIELD_PATTERN.test(metadataToInspect)) {
-    return false;
-  }
-
-  return true;
-}
-
-function collectTierMatches(
+function isWorkdayApplicationPage(
   doc: Document,
-  selectors: readonly string[],
-): { elements: HTMLInputElement[]; matchedSelector: string } {
-  const unique = new Set<HTMLInputElement>();
-  let matchedSelector = '';
-
-  for (const selector of selectors) {
-    for (const el of queryElements(doc, selector)) {
-      if (isEligibleFirstNameInput(doc, el)) {
-        if (!matchedSelector) {
-          matchedSelector = selector;
-        }
-        unique.add(el);
-      }
-    }
+  url: string,
+  adapter: WorkdayAdapter,
+): boolean {
+  if (!adapter.isSupportedUrl(url)) {
+    return false;
   }
-
-  return { elements: Array.from(unique), matchedSelector };
+  const detection = adapter.detectFromDocument(doc, url);
+  return (
+    detection.platformId === 'workday' &&
+    detection.isSupported &&
+    detection.isApplicationPage
+  );
 }
 
 export function findWorkdayFirstNameField(doc: Document): WorkdayFieldLookupResult {
-  const tier1 = collectTierMatches(doc, TIER1_FIRST_NAME_SELECTORS);
-  if (tier1.elements.length === 1 && tier1.elements[0]) {
-    return { status: 'found', element: tier1.elements[0], matchedBy: tier1.matchedSelector };
-  }
-  if (tier1.elements.length > 1) {
-    return {
-      status: 'ambiguous',
-      reason: 'Multiple First Name fields detected; unable to determine a unique target.',
-    };
-  }
-
-  const tier2 = collectTierMatches(doc, TIER2_FIRST_NAME_SELECTORS);
-  if (tier2.elements.length === 1 && tier2.elements[0]) {
-    return { status: 'found', element: tier2.elements[0], matchedBy: tier2.matchedSelector };
-  }
-  if (tier2.elements.length > 1) {
-    return {
-      status: 'ambiguous',
-      reason: 'Multiple First Name fields detected; unable to determine a unique target.',
-    };
-  }
-
-  const labelMatches = new Set<HTMLInputElement>();
-  for (const el of queryElements(doc, 'input')) {
-    if (!isEligibleFirstNameInput(doc, el)) {
-      continue;
-    }
-    const normalizedLabel = normalizeLabelText(getAccessibleLabel(doc, el));
-    if (normalizedLabel && EXACT_FIRST_NAME_LABEL_PATTERN.test(normalizedLabel)) {
-      labelMatches.add(el);
-    }
-  }
-
-  const resolved = Array.from(labelMatches);
-  if (resolved.length === 1 && resolved[0]) {
-    return { status: 'found', element: resolved[0], matchedBy: 'label:first-name' };
-  }
-  if (resolved.length > 1) {
-    return {
-      status: 'ambiguous',
-      reason: 'Multiple First Name fields detected; unable to determine a unique target.',
-    };
-  }
-
-  return {
-    status: 'not_found',
-    reason: 'First Name field could not be identified.',
-  };
+  return findUniqueInputField(doc, WORKDAY_FIRST_NAME_CONFIG);
 }
 
-function setInputValueAndDispatchEvents(input: HTMLInputElement, value: string): void {
-  if (typeof input.focus === 'function') {
-    input.focus();
-  }
+export function findWorkdayLastNameField(doc: Document): WorkdayFieldLookupResult {
+  return findUniqueInputField(doc, WORKDAY_LAST_NAME_CONFIG);
+}
 
-  const prototypeSetter =
-    typeof HTMLInputElement !== 'undefined' && input instanceof HTMLInputElement
-      ? Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
-      : undefined;
-
-  if (prototypeSetter) {
-    prototypeSetter.call(input, value);
-  } else {
-    input.value = value;
-  }
-
-  if (typeof input.dispatchEvent === 'function' && typeof Event === 'function') {
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    input.dispatchEvent(new Event('change', { bubbles: true }));
-  }
+export function findWorkdayEmailField(doc: Document): WorkdayFieldLookupResult {
+  return findUniqueInputField(doc, WORKDAY_EMAIL_CONFIG);
 }
 
 export function autofillWorkdayFirstName(
@@ -467,75 +389,100 @@ export function autofillWorkdayFirstName(
   firstName: string,
   adapter: WorkdayAdapter = new WorkdayAdapter(),
 ): AutofillFieldResult {
-  if (!adapter.isSupportedUrl(url)) {
+  if (!isWorkdayApplicationPage(doc, url, adapter)) {
     return {
       ok: false,
       status: 'unsupported_page',
       field: 'firstName',
+      label: 'First Name',
       message: 'Autofill is only supported on Workday application pages.',
     };
   }
 
-  const detection = adapter.detectFromDocument(doc, url);
-  if (
-    detection.platformId !== 'workday' ||
-    !detection.isSupported ||
-    !detection.isApplicationPage
-  ) {
+  return populateMatchedField(doc, firstName, WORKDAY_FIRST_NAME_CONFIG, 'missing_first_name');
+}
+
+export function autofillWorkdayLastName(
+  doc: Document,
+  url: string,
+  lastName: string,
+  adapter: WorkdayAdapter = new WorkdayAdapter(),
+): AutofillFieldResult {
+  if (!isWorkdayApplicationPage(doc, url, adapter)) {
     return {
       ok: false,
       status: 'unsupported_page',
-      field: 'firstName',
+      field: 'lastName',
+      label: 'Last Name',
       message: 'Autofill is only supported on Workday application pages.',
     };
   }
 
-  const trimmedFirstName = firstName.trim();
-  if (!trimmedFirstName) {
+  return populateMatchedField(doc, lastName, WORKDAY_LAST_NAME_CONFIG, 'missing_value');
+}
+
+export function autofillWorkdayEmail(
+  doc: Document,
+  url: string,
+  email: string,
+  adapter: WorkdayAdapter = new WorkdayAdapter(),
+): AutofillFieldResult {
+  if (!isWorkdayApplicationPage(doc, url, adapter)) {
     return {
       ok: false,
-      status: 'missing_first_name',
-      field: 'firstName',
-      message: 'First Name is missing from your profile.',
+      status: 'unsupported_page',
+      field: 'email',
+      label: 'Email',
+      message: 'Autofill is only supported on Workday application pages.',
     };
   }
 
-  const lookup = findWorkdayFirstNameField(doc);
-  if (lookup.status !== 'found') {
+  return populateMatchedField(doc, email, WORKDAY_EMAIL_CONFIG, 'missing_value');
+}
+
+export function autofillWorkdayFields(
+  doc: Document,
+  url: string,
+  values: WorkdayBasicProfileValues,
+  adapter: WorkdayAdapter = new WorkdayAdapter(),
+): WorkdayAutofillBatchResult {
+  if (!isWorkdayApplicationPage(doc, url, adapter)) {
     return {
       ok: false,
-      status: lookup.status === 'ambiguous' ? 'field_ambiguous' : 'field_not_found',
-      field: 'firstName',
-      message: lookup.reason,
+      results: [
+        {
+          ok: false,
+          status: 'unsupported_page',
+          field: 'firstName',
+          label: 'First Name',
+          message: 'Unsupported page.',
+        },
+        {
+          ok: false,
+          status: 'unsupported_page',
+          field: 'lastName',
+          label: 'Last Name',
+          message: 'Unsupported page.',
+        },
+        {
+          ok: false,
+          status: 'unsupported_page',
+          field: 'email',
+          label: 'Email',
+          message: 'Unsupported page.',
+        },
+      ],
     };
   }
 
-  const currentValue = (lookup.element.value ?? '').trim();
-  if (currentValue.length > 0) {
-    return {
-      ok: false,
-      status: 'already_populated',
-      field: 'firstName',
-      message: 'Field already contains a value.',
-      matchedBy: lookup.matchedBy,
-    };
-  }
+  const results: AutofillFieldResult[] = [
+    populateMatchedField(doc, values.firstName, WORKDAY_FIRST_NAME_CONFIG, 'missing_first_name'),
+    populateMatchedField(doc, values.lastName, WORKDAY_LAST_NAME_CONFIG, 'missing_value'),
+    populateMatchedField(doc, values.email, WORKDAY_EMAIL_CONFIG, 'missing_value'),
+  ];
 
-  try {
-    setInputValueAndDispatchEvents(lookup.element, trimmedFirstName);
-    return {
-      ok: true,
-      status: 'filled',
-      field: 'firstName',
-      message: 'First Name filled successfully.',
-      matchedBy: lookup.matchedBy,
-    };
-  } catch {
-    return {
-      ok: false,
-      status: 'failed',
-      field: 'firstName',
-      message: 'Autofill failed.',
-    };
-  }
+  return {
+    ok: results.some((item) => item.ok),
+    results,
+  };
 }

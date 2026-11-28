@@ -4,12 +4,18 @@ import {
 } from '../adapters/registry';
 import { DEFAULT_USER_PROFILE, STORAGE_KEYS } from '../shared/constants';
 import type {
+  AutofillFieldKey,
   AutofillFieldResult,
+  AutofillStatusCode,
   ExtensionMessage,
   ExtensionMessageResponse,
   PlatformDetectionResult,
+  WorkdayAutofillBatchResult,
 } from '../shared/types';
-import { getSavedFirstName } from '../storage/profileStorage';
+import {
+  getSavedFirstName,
+  getWorkdayBasicProfileValues,
+} from '../storage/profileStorage';
 
 const RESTRICTED_URL_PREFIXES = [
   'chrome://',
@@ -120,6 +126,85 @@ function autofillResultResponse(result: AutofillFieldResult): ExtensionMessageRe
   return { ok: true, result };
 }
 
+function createBatchForAllFields(
+  status: AutofillStatusCode,
+  message: string,
+): WorkdayAutofillBatchResult {
+  const fields: Array<{ field: AutofillFieldKey; label: string }> = [
+    { field: 'firstName', label: 'First Name' },
+    { field: 'lastName', label: 'Last Name' },
+    { field: 'email', label: 'Email' },
+  ];
+
+  return {
+    ok: false,
+    results: fields.map(({ field, label }) => ({
+      ok: false,
+      status,
+      field,
+      label,
+      message,
+    })),
+  };
+}
+
+function autofillBatchResponse(batch: WorkdayAutofillBatchResult): ExtensionMessageResponse {
+  return { ok: true, batch };
+}
+
+async function handleWorkdayFieldsAutofill(): Promise<ExtensionMessageResponse> {
+  const activeTab = await getActiveTab();
+  if (!activeTab || activeTab.id === undefined) {
+    return autofillBatchResponse(createBatchForAllFields('failed', 'No active browser tab found.'));
+  }
+
+  const platformStatus = await resolveActiveTabPlatform();
+  if (!platformStatus.ok || !('detection' in platformStatus)) {
+    return autofillBatchResponse(
+      createBatchForAllFields('failed', 'Unable to verify current page platform.'),
+    );
+  }
+
+  const { detection } = platformStatus;
+  if (
+    detection.platformId !== 'workday' ||
+    !detection.isSupported ||
+    !detection.isApplicationPage
+  ) {
+    return autofillBatchResponse(
+      createBatchForAllFields('unsupported_page', 'Unsupported page.'),
+    );
+  }
+
+  const profileLookup = await getWorkdayBasicProfileValues();
+  if (!profileLookup.ok) {
+    const labelMessage =
+      profileLookup.status === 'missing_profile'
+        ? 'Missing from profile.'
+        : profileLookup.message;
+    return autofillBatchResponse(
+      createBatchForAllFields(profileLookup.status, labelMessage),
+    );
+  }
+
+  try {
+    const response = (await chrome.tabs.sendMessage(activeTab.id, {
+      type: 'EXECUTE_WORKDAY_FIELDS_AUTOFILL',
+      values: profileLookup.values,
+    } satisfies ExtensionMessage)) as ExtensionMessageResponse | undefined;
+
+    if (response?.ok && 'batch' in response) {
+      return response;
+    }
+
+    return autofillBatchResponse(createBatchForAllFields('failed', 'Autofill failed.'));
+  } catch {
+    return autofillBatchResponse(
+      createBatchForAllFields('failed', 'Autofill failed. Reload the Workday tab and try again.'),
+    );
+  }
+}
+
 async function handleWorkdayFirstNameAutofill(): Promise<ExtensionMessageResponse> {
   const activeTab = await getActiveTab();
   if (!activeTab || activeTab.id === undefined) {
@@ -228,6 +313,16 @@ chrome.runtime.onMessage.addListener(
               message: messageText,
             }),
           );
+        });
+      return true;
+    }
+
+    if (message.type === 'AUTOFILL_WORKDAY_FIELDS') {
+      void handleWorkdayFieldsAutofill()
+        .then(sendResponse)
+        .catch((error: unknown) => {
+          const messageText = error instanceof Error ? error.message : 'Autofill failed.';
+          sendResponse(autofillBatchResponse(createBatchForAllFields('failed', messageText)));
         });
       return true;
     }
